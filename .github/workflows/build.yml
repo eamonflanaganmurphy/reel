@@ -1,0 +1,33 @@
+name: Build
+
+# Compiles the app for iOS (unsigned) and runs ReelCore's tests on macOS, so a
+# broken build shows up here rather than in Xcode on the Mac.
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: .spm
+          key: spm-${{ hashFiles('project.yml', 'Packages/ReelCore/Package.swift') }}
+
+      - name: ReelCore tests
+        working-directory: Packages/ReelCore
+        run: swift test
+
+      - name: Build app
+        run: |
+          xcodebuild build \
+            -project Reel.xcodeproj -scheme Reel \
+            -destination 'generic/platform=iOS' \
+            -clonedSourcePackagesDirPath .spm \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build.log | grep -E 'error:|warning: .*Reel/|BUILD (SUCCEEDED|FAILED)' || true
+          grep -q 'BUILD SUCCEEDED' build.log

@@ -1,0 +1,43 @@
+import SwiftData
+import SwiftUI
+
+struct RootView: View {
+    @Environment(AppSettings.self) private var settings
+    @Environment(LibrarySync.self) private var sync
+    @Environment(PlaybackCenter.self) private var playback
+    @Environment(\.modelContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
+
+    @State private var tab = "home"
+
+    var body: some View {
+        @Bindable var playback = playback
+        TabView(selection: $tab) {
+            NavigationStack { HomeView(openSettings: { tab = "settings" }) }
+                .tabItem { Label("Home", systemImage: "house") }
+                .tag("home")
+
+            ForEach(settings.libraries) { library in
+                NavigationStack { LibraryView(library: library) }
+                    .tabItem { Label(library.name, systemImage: library.systemImage) }
+                    .tag(library.id.uuidString)
+            }
+
+            NavigationStack { SettingsView() }
+                .tabItem { Label("Settings", systemImage: "gearshape") }
+                .tag("settings")
+        }
+        .fullScreenCover(item: $playback.session) { session in
+            PlayerScreen(session: session)
+        }
+        .task {
+            if !settings.isConfigured { tab = "settings" }
+        }
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            // Pick up new downloads when the app comes back, at most every 15 minutes.
+            guard phase == .active, settings.isConfigured else { return }
+            if let last = sync.lastSync, Date().timeIntervalSince(last) < 15 * 60 { return }
+            Task { await sync.run(settings: settings, context: context) }
+        }
+    }
+}
