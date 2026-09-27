@@ -4,12 +4,15 @@ name: Build
 # broken build shows up here rather than in Xcode on the Mac.
 on:
   push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -20,14 +23,30 @@ jobs:
 
       - name: ReelCore tests
         working-directory: Packages/ReelCore
-        run: swift test
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee ../../test.log | tail -5
 
       - name: Build app
         run: |
+          set -o pipefail
+          xcodebuild -version | tee build.log
           xcodebuild build \
             -project Reel.xcodeproj -scheme Reel \
             -destination 'generic/platform=iOS' \
             -clonedSourcePackagesDirPath .spm \
-            CODE_SIGNING_ALLOWED=NO \
-            | tee build.log | grep -E 'error:|warning: .*Reel/|BUILD (SUCCEEDED|FAILED)' || true
-          grep -q 'BUILD SUCCEEDED' build.log
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee -a build.log | grep -E 'error:|BUILD (SUCCEEDED|FAILED)'
+
+      # The logs go to a ci-logs branch as plain files, readable with git
+      # alone, for tooling that can't reach the Actions API.
+      - name: Publish logs
+        if: always()
+        run: |
+          mkdir -p /tmp/ci-logs
+          grep -E 'error:|warning:.*/Reel/|BUILD (SUCCEEDED|FAILED)' build.log > /tmp/ci-logs/summary.txt || true
+          cp build.log test.log /tmp/ci-logs/ 2>/dev/null || true
+          cd /tmp/ci-logs
+          git init -q -b ci-logs
+          git add -A
+          git -c user.name=ci -c user.email=ci@localhost commit -qm "${GITHUB_SHA::7} ${{ job.status }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-logs
