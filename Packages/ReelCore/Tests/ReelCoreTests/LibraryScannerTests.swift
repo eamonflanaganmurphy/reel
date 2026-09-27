@@ -44,7 +44,8 @@ final class LibraryScannerTests: XCTestCase {
         XCTAssertEqual(moana.video.subtitles.map(\.label), ["Danish"])
         let bytte = try XCTUnwrap(result.movies.first { $0.title == "Bytte Bytte Baby" })
         XCTAssertEqual(bytte.video.subtitles.map(\.label), ["English"])
-        XCTAssertEqual(result.movies.first { $0.title == "Jerry Maguire" }?.year, nil)
+        // Folder has no year; the filename does.
+        XCTAssertEqual(result.movies.first { $0.title == "Jerry Maguire" }?.year, 1996)
     }
 
     func testShowsWithAndWithoutSeasonFolders() async throws {

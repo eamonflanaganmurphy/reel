@@ -28,6 +28,7 @@ jobs:
           swift test 2>&1 | tee ../../test.log | tail -5
 
       - name: Build app
+        if: success() || failure()
         run: |
           set -o pipefail
           xcodebuild -version | tee build.log
