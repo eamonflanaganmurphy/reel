@@ -45,6 +45,9 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         # Without this iOS silently blocks connections to the router.
         NSLocalNetworkUsageDescription: Reel connects to your SMB share to list and play your movies and TV shows.
+        # Needed to list SMB servers the way the Files app does.
+        NSBonjourServices:
+          - _smb._tcp
         # Lets audio keep going for the second it takes to lock the phone and
         # plays through the silent switch.
         UIBackgroundModes:

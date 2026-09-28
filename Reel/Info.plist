@@ -22,6 +22,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_smb._tcp</string>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Reel connects to your SMB share to list and play your movies and TV shows.</string>
 	<key>UIApplicationSceneManifest</key>

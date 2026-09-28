@@ -21,6 +21,9 @@ final class LibrarySync {
 
     func run(settings: AppSettings, context: ModelContext) async {
         guard settings.isConfigured, !isRunning else { return }
+        state = .scanning("Connecting…")
+        await settings.tidyAddress()
+        var problems: [String] = []
         do {
             let config = settings.smbConfig
             let source = try ServerConnection.shared.source(for: config)
@@ -28,7 +31,23 @@ final class LibrarySync {
 
             for library in settings.libraries {
                 state = .scanning("Scanning \(library.name)…")
-                let result = try await scanner.scan(root: library.path, kind: library.kind)
+                let result: ScanResult
+                do {
+                    result = try await scanner.scan(root: library.path, kind: library.kind)
+                } catch let error as SMBError {
+                    // A wrong folder spoils one library, not the rest. Losing
+                    // the server or the share still stops everything.
+                    guard case .folder = error else { throw error }
+                    problems.append("\(library.name): \(error.localizedDescription) Pick the folder in Settings → Libraries.")
+                    continue
+                }
+                let existing = count(in: library, context: context)
+                if result.movies.isEmpty, result.shows.isEmpty, existing > 0 {
+                    // An empty folder where there used to be a library is far
+                    // more likely an unmounted disk than a deleted library.
+                    problems.append("\(library.name): the folder is empty, so it was left as it was.")
+                    continue
+                }
                 switch library.kind {
                 case .movies: applyMovies(result.movies, library: library, context: context)
                 case .shows: applyShows(result.shows, library: library, context: context)
@@ -45,7 +64,7 @@ final class LibrarySync {
 
             lastSync = .now
             UserDefaults.standard.set(lastSync, forKey: "lastSync")
-            state = .idle
+            state = problems.isEmpty ? .idle : .failed(problems.joined(separator: "\n"))
         } catch {
             try? context.save()
             state = .failed(Self.describe(error))
@@ -57,6 +76,11 @@ final class LibrarySync {
         for video in (try? context.fetch(FetchDescriptor<Video>())) ?? [] { video.metadataFetched = false }
         for show in (try? context.fetch(FetchDescriptor<Show>())) ?? [] { show.metadataFetched = false }
         try? context.save()
+    }
+
+    private func count(in library: LibraryConfig, context: ModelContext) -> Int {
+        let id = library.id
+        return (try? context.fetchCount(FetchDescriptor<Video>(predicate: #Predicate { $0.libraryID == id }))) ?? 0
     }
 
     // MARK: Applying a scan
@@ -215,18 +239,7 @@ final class LibrarySync {
     }
 
     nonisolated static func describe(_ error: Error) -> String {
-        let ns = error as NSError
-        if ns.domain == NSPOSIXErrorDomain {
-            switch ns.code {
-            case Int(ETIMEDOUT), Int(EHOSTUNREACH), Int(ENETUNREACH), Int(ECONNREFUSED):
-                return "Can't reach the server. Are you on the router's network?"
-            case Int(EACCES), Int(EPERM):
-                return "The server refused the username or password."
-            case Int(ENOENT):
-                return "A library folder wasn't found on the share. Check the paths in Settings."
-            default: break
-            }
-        }
+        if let smb = error as? SMBError, let message = smb.errorDescription { return message }
         return error.localizedDescription
     }
 }

@@ -50,10 +50,38 @@ final class AppSettings {
             .flatMap { try? JSONDecoder().decode([LibraryConfig].self, from: $0) } ?? LibraryConfig.defaults
     }
 
+    /// Tolerates "smb://host/share" in the address field and "share/folder"
+    /// in the share field, the forms the Files app and VLC use.
     var smbConfig: SMBConfig {
-        SMBConfig(host: host.trimmingCharacters(in: .whitespaces),
-                  share: share.trimmingCharacters(in: CharacterSet(charactersIn: " /")),
-                  username: username, password: password)
+        let address = SMBConfig.parse(address: host)
+        let shareField = share.trimmingCharacters(in: .whitespaces)
+            .split(whereSeparator: { $0 == "/" || $0 == "\\" }).first.map(String.init) ?? ""
+        return SMBConfig(host: address.host,
+                         share: shareField.isEmpty ? (address.share ?? "") : shareField,
+                         username: username.trimmingCharacters(in: .whitespaces),
+                         password: password)
+    }
+
+    /// Rewrites the address fields into their plain form: moves a share
+    /// typed into the address into the share field, and turns a bare
+    /// Bonjour name into "<name>.local" when only that resolves. Returns a
+    /// note for the user when something changed.
+    @MainActor @discardableResult
+    func tidyAddress() async -> String? {
+        let parsed = SMBConfig.parse(address: host)
+        var notes: [String] = []
+        if let s = parsed.share, share.trimmingCharacters(in: .whitespaces).isEmpty {
+            share = s
+            notes.append("share set to “\(s)”")
+        }
+        var newHost = parsed.host
+        let resolved = await HostResolver.bestHost(newHost)
+        if resolved != newHost {
+            notes.append("using “\(resolved)”")
+            newHost = resolved
+        }
+        if newHost != host { host = newHost }
+        return notes.isEmpty ? nil : "Address tidied: " + notes.joined(separator: ", ") + "."
     }
 
     var isConfigured: Bool { smbConfig.isComplete }

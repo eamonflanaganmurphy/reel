@@ -114,11 +114,11 @@ public struct LibraryScanner: Sendable {
     // MARK: Movies
 
     private func scanMovieFolder(_ dir: FileEntry, depth: Int) async throws -> [ScannedMovie] {
-        let entries = try await source.list(dir.path).filter { !Self.isIgnored($0.name) }
+        let entries = try await listBelowRoot(dir.path).filter { !Self.isIgnored($0.name) }
         let subdirs = entries.filter(\.isDirectory)
         let subsDirs = subdirs.filter { Self.isSubsFolder($0.name) }
         var subsFiles: [FileEntry] = []
-        for s in subsDirs { subsFiles += try await source.list(s.path) }
+        for s in subsDirs { subsFiles += try await listBelowRoot(s.path) }
 
         var found = Self.movies(in: entries, folderTitle: dir.name, subsDirs: subsFiles)
         if depth < maxDepth {
@@ -180,7 +180,7 @@ public struct LibraryScanner: Sendable {
 
     private func collectEpisodes(in dir: FileEntry, seasonHint: Int?, depth: Int,
                                  into episodes: inout [ScannedEpisode], poster: inout String?) async throws {
-        let entries = try await source.list(dir.path).filter { !Self.isIgnored($0.name) }
+        let entries = try await listBelowRoot(dir.path).filter { !Self.isIgnored($0.name) }
         let subtitles = entries.filter { Self.isSubtitle($0.name) }
         let images = entries.filter { Self.isImage($0.name) }
         if depth == 1, poster == nil {
@@ -220,6 +220,17 @@ public struct LibraryScanner: Sendable {
         for sub in entries where sub.isDirectory && !Self.isExtrasFolder(sub.name) && !Self.isSubsFolder(sub.name) {
             let hint = NameParser.seasonNumber(folder: sub.name) ?? seasonHint
             try await collectEpisodes(in: sub, seasonHint: hint, depth: depth + 1, into: &episodes, poster: &poster)
+        }
+    }
+
+    /// A folder that vanished or can't be read mid-scan is skipped. Anything
+    /// else - a dropped connection - still fails the scan, because a
+    /// half-empty result would make the app forget what it had.
+    private func listBelowRoot(_ path: String) async throws -> [FileEntry] {
+        do {
+            return try await source.list(path)
+        } catch let SMBError.folder(_, code, _) where [ENOENT, EACCES, EPERM, ENOTDIR].contains(code) {
+            return []
         }
     }
 
