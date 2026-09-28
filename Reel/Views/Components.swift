@@ -27,7 +27,7 @@ struct PosterCard: View {
     }
 }
 
-/// 16:9 card for Keep Watching / Up Next.
+/// 16:9 card for Keep Watching.
 struct WideCard: View {
     let video: Video
 

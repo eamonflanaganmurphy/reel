@@ -5,7 +5,7 @@ share (a mirror of Bucket_A). It connects straight to the share, so there's no
 server software involved: the app lists the folders itself, looks titles up on
 TMDB, and plays the files with VLC. Nothing is transcoded.
 
-- **Library:** Home (Keep Watching, Up Next, Recently Added), plus a poster grid per library
+- **Library:** Home (Keep Watching, Recently Added), plus a poster grid per library
 - **Watch progress on the share:** where you got to in each video is kept in a hidden `.reel/progress` folder on
   the share, so every phone running Reel (or a reinstall) resumes in the same place and shows the same Keep Watching.
   Each install writes its own file and the newest entry wins, so the SMB login needs write access.

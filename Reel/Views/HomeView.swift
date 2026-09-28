@@ -19,17 +19,6 @@ struct HomeView: View {
     @Query(sort: \Show.updatedAt, order: .reverse)
     private var shows: [Show]
 
-    /// For each show you're partway through, the next episode - unless it's
-    /// already in Keep Watching.
-    private var upNext: [Video] {
-        let continuing = Set(inProgress.map(\.path))
-        return shows
-            .filter(\.hasStarted)
-            .sorted { ($0.lastPlayedAt ?? .distantPast) > ($1.lastPlayedAt ?? .distantPast) }
-            .compactMap(\.nextUp)
-            .filter { !continuing.contains($0.path) && !$0.watched }
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
@@ -39,15 +28,7 @@ struct HomeView: View {
                     ShelfRow(title: "Keep Watching", items: inProgress, cardWidth: 240) { video in
                         Button { playback.play(video) } label: { WideCard(video: video) }
                             .buttonStyle(.plain)
-                            .contextMenu { watchedMenu(video) }
-                    }
-                }
-
-                if !upNext.isEmpty {
-                    ShelfRow(title: "Up Next", items: upNext, cardWidth: 240) { video in
-                        Button { playback.play(video) } label: { WideCard(video: video) }
-                            .buttonStyle(.plain)
-                            .contextMenu { watchedMenu(video) }
+                            .contextMenu { keepWatchingMenu(video) }
                     }
                 }
 
@@ -138,8 +119,10 @@ struct HomeView: View {
     }
 
     @ViewBuilder
-    private func watchedMenu(_ video: Video) -> some View {
+    private func keepWatchingMenu(_ video: Video) -> some View {
         Button { video.setWatched(true) } label: { Label("Mark as Watched", systemImage: "checkmark.circle") }
+        // Clears the position, which takes it off Keep Watching.
+        Button { video.setWatched(false) } label: { Label("Mark as Unwatched", systemImage: "circle") }
         Button { playback.play(video, from: 0) } label: { Label("Play from Beginning", systemImage: "arrow.counterclockwise") }
     }
 }

@@ -59,8 +59,6 @@ final class Show {
         return [eps.lazy.compactMap(\.posterRef).first] + eps.prefix(3).map(\.frameRef)
     }
 
-    var hasStarted: Bool { episodes.contains { $0.watched || $0.isInProgress } }
-    var lastPlayedAt: Date? { episodes.compactMap(\.lastPlayedAt).max() }
     var unwatchedCount: Int { episodes.filter { !$0.watched }.count }
 }
 
