@@ -66,7 +66,7 @@ private struct MoviePage: View {
     }
 }
 
-/// Play / Resume, Infuse-style: resume is the big button when there's a
+/// Play / Resume: resume is the big button when there's a
 /// position to resume from.
 struct PlayButtons: View {
     let video: Video

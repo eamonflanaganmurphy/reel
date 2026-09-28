@@ -1,7 +1,8 @@
 name: Build
 
-# Compiles the app for iOS (unsigned) and runs ReelCore's tests on macOS, so a
-# broken build shows up here rather than in Xcode on the Mac.
+# Runs ReelCore's tests on macOS and builds an unsigned Reel.ipa, so a broken
+# build shows up here rather than in Xcode on the Mac. Good builds are released
+# for SideStore (see sidestore/source.json).
 on:
   push:
     branches: [main]
@@ -32,11 +33,39 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild -version | tee build.log
-          xcodebuild build \
-            -project Reel.xcodeproj -scheme Reel \
-            -destination 'generic/platform=iOS' \
-            -clonedSourcePackagesDirPath .spm \
-            CODE_SIGNING_ALLOWED=NO 2>&1 | tee -a build.log | grep -E 'error:|BUILD (SUCCEEDED|FAILED)'
+          # Each build gets its own version (0.1.<run>) so SideStore sees it as an update.
+          BASE=$(sed -n 's/^ *MARKETING_VERSION: "\(.*\)"/\1/p' project.yml)
+          echo "VERSION=$BASE.${{ github.run_number }}" >> "$GITHUB_ENV"
+          ./scripts/build-ipa.sh \
+            MARKETING_VERSION="$BASE.${{ github.run_number }}" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            2>&1 | tee -a build.log | grep -E 'error:|(BUILD|ARCHIVE) (SUCCEEDED|FAILED)|^Built '
+
+      # Each good build of main becomes a release holding Reel.ipa and a
+      # SideStore source listing it. SideStore follows
+      # releases/latest/download/source.json, so it always sees the newest.
+      - name: Release for SideStore
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=build-${{ github.run_number }}
+          URL=https://github.com/${{ github.repository }}/releases/download/$TAG/Reel.ipa
+          NOTES=$(git log -1 --format=%s)
+          MIN_OS=$(sed -n 's/^ *iOS: "\(.*\)"/\1/p' project.yml)
+          DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          SIZE=$(stat -f%z build/Reel.ipa)
+          # The legacy top-level fields are for older SideStore releases.
+          jq --arg v "$VERSION" --arg b "${{ github.run_number }}" --arg d "$DATE" --arg u "$URL" \
+             --argjson s "$SIZE" --arg n "$NOTES" --arg os "$MIN_OS" '
+            .apps[0] += {version: $v, versionDate: $d, downloadURL: $u, size: $s, versionDescription: $n}
+            | .apps[0].versions = [{version: $v, buildVersion: $b, date: $d, downloadURL: $u,
+                                    size: $s, localizedDescription: $n, minOSVersion: $os}]
+          ' sidestore/source.json > build/source.json
+          gh release create "$TAG" build/Reel.ipa build/source.json \
+            --target "$GITHUB_SHA" --title "Reel $VERSION" --notes "$NOTES" --latest
+          # Keep the five newest builds.
+          gh release list --limit 100 --json tagName --jq '.[].tagName' | grep '^build-' | tail -n +6 |
+            while read -r old; do gh release delete "$old" --cleanup-tag --yes; done
 
       # The logs go to a ci-logs branch as plain files, readable with git
       # alone, for tooling that can't reach the Actions API.
@@ -44,7 +73,7 @@ jobs:
         if: always()
         run: |
           mkdir -p /tmp/ci-logs
-          grep -E 'error:|warning:.*/Reel/|BUILD (SUCCEEDED|FAILED)' build.log > /tmp/ci-logs/summary.txt || true
+          grep -E 'error:|warning:.*/Reel/|(BUILD|ARCHIVE) (SUCCEEDED|FAILED)' build.log > /tmp/ci-logs/summary.txt || true
           cp build.log test.log /tmp/ci-logs/ 2>/dev/null || true
           cd /tmp/ci-logs
           git init -q -b ci-logs

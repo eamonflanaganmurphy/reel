@@ -1,0 +1,26 @@
+{
+  "name": "Reel",
+  "identifier": "me.eamonmurphy.reel.source",
+  "subtitle": "Builds of Reel from main.",
+  "iconURL": "https://raw.githubusercontent.com/eamonflanaganmurphy/reel/main/Reel/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
+  "website": "https://github.com/eamonflanaganmurphy/reel",
+  "apps": [
+    {
+      "name": "Reel",
+      "bundleIdentifier": "me.eamonmurphy.reel",
+      "developerName": "Eamon Murphy",
+      "subtitle": "Movies and TV straight from an SMB share.",
+      "localizedDescription": "Reel plays the movies and TV on an SMB share with VLC, with nothing transcoded. It lists the folders itself, looks titles up on TMDB, and keeps watch progress on the share so every phone resumes in the same place.",
+      "iconURL": "https://raw.githubusercontent.com/eamonflanaganmurphy/reel/main/Reel/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
+      "category": "entertainment",
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSLocalNetworkUsageDescription": "Reel connects to your SMB share to list and play your movies and TV shows."
+        }
+      },
+      "versions": []
+    }
+  ],
+  "news": []
+}

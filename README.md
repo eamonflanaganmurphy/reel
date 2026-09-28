@@ -1,6 +1,6 @@
 # Reel
 
-An Infuse-style iPhone player for the movies and TV on the Nomad router's SMB
+An iPhone player for the movies and TV on the Nomad router's SMB
 share (a mirror of Bucket_A). It connects straight to the share, so there's no
 server software involved: the app lists the folders itself, looks titles up on
 TMDB, and plays the files with VLC. Nothing is transcoded.
@@ -38,17 +38,17 @@ your library and watch progress are kept.
 [SideStore](https://sidestore.io) re-signs apps with your Apple ID and refreshes them from the phone, so
 there's no need to plug in every 7 days.
 
-1. On the Mac, build an unsigned IPA (needs Xcode and XcodeGen, as above):
-   ```sh
-   ./scripts/build-ipa.sh
-   ```
-   This writes `build/Reel.ipa` (about 45 MB).
-2. AirDrop `build/Reel.ipa` to the iPhone and save it to Files.
-3. In SideStore, go to **My Apps** → **+** and pick `Reel.ipa`. SideStore signs it with your Apple ID and installs it.
-4. Allow local network access when Reel asks, then set it up as below.
+1. In SideStore, open **Sources** → **+** and add
+   `https://github.com/eamonflanaganmurphy/reel/releases/latest/download/source.json`
+2. Open the Reel source and tap **Get**. SideStore signs Reel with your Apple ID and installs it.
+3. Allow local network access when Reel asks, then set it up as below.
 
-To update, rebuild and install the new IPA the same way. Your library and watch progress are kept.
+Every push to `main` that builds and passes the tests is released as a new version, and SideStore
+offers it under **My Apps** → **Updates**. Your library and watch progress are kept.
 A free Apple ID allows 3 sideloaded apps at once, and SideStore itself uses one of them.
+
+To install a local build instead, run `./scripts/build-ipa.sh`, AirDrop `build/Reel.ipa` to the
+iPhone, and pick it in SideStore under **My Apps** → **+**.
 
 ## Set up in the app
 
@@ -84,6 +84,8 @@ It prints what it found, plus anything it couldn't name properly. Add `--all` to
 
 ```
 project.yml            XcodeGen spec (Reel.xcodeproj is generated from it)
+scripts/build-ipa.sh   builds an unsigned build/Reel.ipa for SideStore
+sidestore/source.json  the SideStore source; CI fills in each release's version
 Reel/                  the iOS app: SwiftUI + SwiftData
   Model/               settings, SwiftData models, scan/TMDB sync, artwork cache
   Player/              VLCKit wrapper and the player screen
