@@ -118,7 +118,9 @@ public struct LibraryScanner: Sendable {
         let subdirs = entries.filter(\.isDirectory)
         let subsDirs = subdirs.filter { Self.isSubsFolder($0.name) }
         var subsFiles: [FileEntry] = []
-        for s in subsDirs { subsFiles += try await listBelowRoot(s.path) }
+        for s in subsDirs {
+            subsFiles += try await listBelowRoot(s.path).filter { !$0.isDirectory && !Self.isIgnored($0.name) && Self.isSubtitle($0.name) }
+        }
 
         var found = Self.movies(in: entries, folderTitle: dir.name, subsDirs: subsFiles)
         if depth < maxDepth {
@@ -187,16 +189,20 @@ public struct LibraryScanner: Sendable {
             poster = images.first { ["poster", "folder", "show", "cover"].contains(NameParser.stripExtension($0.name).lowercased()) }?.path
         }
 
+        // Parsed once per folder, not once per video: a YouTube channel can
+        // hold hundreds of each.
+        let subtitleEpisodes = subtitles.map { NameParser.parseEpisode($0.name) }
+
         for v in Self.mainVideos(entries) {
             let stem = NameParser.stripExtension(v.name)
             let parsed = NameParser.parseEpisode(v.name)
             // Match subtitles by filename first, then by the same SxxEyy - some
             // grabbers name the subtitle after the release, not the file.
-            let own = subtitles.filter { s in
-                if s.name.hasPrefix(stem + ".") { return true }
-                guard let p = parsed, let sp = NameParser.parseEpisode(s.name) else { return false }
-                return sp.season == p.season && sp.episode == p.episode
-                    && !subtitles.contains { $0.name.hasPrefix(stem + ".") }
+            var own = subtitles.filter { $0.name.hasPrefix(stem + ".") }
+            if own.isEmpty, let p = parsed {
+                own = zip(subtitles, subtitleEpisodes)
+                    .filter { $0.1?.season == p.season && $0.1?.episode == p.episode }
+                    .map(\.0)
             }
             let thumb = images.first {
                 let s = NameParser.stripExtension($0.name)

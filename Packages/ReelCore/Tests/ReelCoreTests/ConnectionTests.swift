@@ -46,6 +46,20 @@ final class ConnectionTests: XCTestCase {
         XCTAssertNil(found["missing"])
     }
 
+    func testLocatorToleratesRepeatedNames() async throws {
+        // Two libraries whose folders share a name used to crash the lookup.
+        let source = MemorySource(["library/movies/a.mkv"])
+        let found = try await LibraryLocator(source: source).find(["movies", "Movies", "movies"])
+        XCTAssertEqual(found["movies"], "library/movies")
+    }
+
+    func testConnectionErrorsAreRecognised() {
+        XCTAssertTrue(SMBFileSource.isConnectionError(ENOTCONN))
+        XCTAssertTrue(SMBFileSource.isConnectionError(ETIMEDOUT))
+        XCTAssertFalse(SMBFileSource.isConnectionError(ENOENT))
+        XCTAssertFalse(SMBFileSource.isConnectionError(EACCES))
+    }
+
     func testLocatorPrefersShallowest() async throws {
         let source = MemorySource(["movies/a.mkv", "old/backup/movies/b.mkv"])
         let found = try await LibraryLocator(source: source).find(["movies"])

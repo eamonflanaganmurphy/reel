@@ -33,6 +33,23 @@ TMDB, and plays the files with VLC. Nothing is transcoded.
 With a free Apple ID the install expires after **7 days**. Plug in and press Run again to renew it;
 your library and watch progress are kept.
 
+## Install with SideStore
+
+[SideStore](https://sidestore.io) re-signs apps with your Apple ID and refreshes them from the phone, so
+there's no need to plug in every 7 days.
+
+1. On the Mac, build an unsigned IPA (needs Xcode and XcodeGen, as above):
+   ```sh
+   ./scripts/build-ipa.sh
+   ```
+   This writes `build/Reel.ipa` (about 45 MB).
+2. AirDrop `build/Reel.ipa` to the iPhone and save it to Files.
+3. In SideStore, go to **My Apps** → **+** and pick `Reel.ipa`. SideStore signs it with your Apple ID and installs it.
+4. Allow local network access when Reel asks, then set it up as below.
+
+To update, rebuild and install the new IPA the same way. Your library and watch progress are kept.
+A free Apple ID allows 3 sideloaded apps at once, and SideStore itself uses one of them.
+
 ## Set up in the app
 
 Open the Settings tab:

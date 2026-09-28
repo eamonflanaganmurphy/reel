@@ -17,7 +17,8 @@ public struct LibraryLocator: Sendable {
     /// Breadth-first, so the shallowest match wins. Returns share-relative
     /// paths keyed by the name asked for; names not found are absent.
     public func find(_ names: [String]) async throws -> [String: String] {
-        var wanted = Dictionary(uniqueKeysWithValues: names.map { ($0.lowercased(), $0) })
+        // Two libraries can want the same name ("disk1/movies", "disk2/movies").
+        var wanted = Dictionary(names.map { ($0.lowercased(), $0) }, uniquingKeysWith: { first, _ in first })
         var found: [String: String] = [:]
         var level = [""]
         var listings = 0

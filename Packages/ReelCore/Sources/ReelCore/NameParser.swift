@@ -158,8 +158,7 @@ public enum NameParser {
         } else {
             // "2_English" -> "English"
             let raw = leftovers.joined(separator: " ")
-            label = raw.replacingOccurrences(of: #"^\d+[_\s-]*"#, with: "", options: .regularExpression)
-                .replacingOccurrences(of: "_", with: " ")
+            label = replace(#"^\d+[_\s-]*"#, in: raw, with: "").replacingOccurrences(of: "_", with: " ")
             if label.isEmpty { label = "Subtitles" }
         }
         var flags: [String] = []
@@ -192,12 +191,13 @@ public enum NameParser {
 
     // MARK: Helpers
 
+    private static let knownExtensions = MediaExtensions.video.union(MediaExtensions.subtitle)
+        .union(MediaExtensions.image).union(["iso", "nfo"])
+
     public static func stripExtension(_ name: String) -> String {
         guard let dot = name.lastIndex(of: "."), dot != name.startIndex else { return name }
         let ext = name[name.index(after: dot)...].lowercased()
-        let known = MediaExtensions.video.union(MediaExtensions.subtitle).union(MediaExtensions.image)
-            .union(["iso", "nfo"])
-        return known.contains(ext) ? String(name[..<dot]) : name
+        return knownExtensions.contains(ext) ? String(name[..<dot]) : name
     }
 
     public static func fileExtension(_ name: String) -> String {
@@ -207,12 +207,8 @@ public enum NameParser {
 
     /// "www.UIndex.org    -    200 Cigarettes 1999" and "[EZTVx.to]"-style prefixes.
     static func stripSitePrefix(_ name: String) -> String {
-        var s = name
-        s = s.replacingOccurrences(
-            of: #"^\s*(?:www\.)?[A-Za-z0-9-]+\.(?:org|com|to|net|me|io|cc)\s+-\s+"#,
-            with: "", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"^\s*\[[^\]]*\]\s*"#, with: "", options: .regularExpression)
-        return s
+        let s = replace(#"^\s*(?:www\.)?[A-Za-z0-9-]+\.(?:org|com|to|net|me|io|cc)\s+-\s+"#, in: name, with: "")
+        return replace(#"^\s*\[[^\]]*\]\s*"#, in: s, with: "")
     }
 
     private static let releaseTags: Set<String> = [
@@ -251,7 +247,7 @@ public enum NameParser {
             s = s.replacingOccurrences(of: ".", with: " ")
         }
         s = s.replacingOccurrences(of: "_", with: " ")
-        s = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        s = replace(#"\s+"#, in: s, with: " ")
         return s.trimmingCharacters(in: CharacterSet(charactersIn: " -–·|｜"))
     }
 
@@ -259,9 +255,22 @@ public enum NameParser {
 
     private struct Match { var range: NSRange; var groups: [String] }
 
+    /// Compiled once each. A scan parses every file name on the share, and
+    /// compiling a pattern costs far more than matching it.
+    /// NSRegularExpression and NSCache are both safe to share across threads.
+    nonisolated(unsafe) private static let compiled = NSCache<NSString, NSRegularExpression>()
+
     private static func regex(_ pattern: String) -> NSRegularExpression {
+        if let hit = compiled.object(forKey: pattern as NSString) { return hit }
         // Patterns are literals in this file, so a failure here is a bug.
-        try! NSRegularExpression(pattern: pattern)
+        let regex = try! NSRegularExpression(pattern: pattern)
+        compiled.setObject(regex, forKey: pattern as NSString)
+        return regex
+    }
+
+    private static func replace(_ pattern: String, in s: String, with template: String) -> String {
+        let range = NSRange(location: 0, length: (s as NSString).length)
+        return regex(pattern).stringByReplacingMatches(in: s, range: range, withTemplate: template)
     }
 
     private static func groups(_ m: NSTextCheckingResult, in s: String) -> [String] {

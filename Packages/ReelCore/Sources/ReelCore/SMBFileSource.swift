@@ -207,20 +207,45 @@ public final class SMBFileSource: FileSource, ProgressStorage, @unchecked Sendab
         }
     }
 
-    public func list(_ path: String) async throws -> [FileEntry] {
+    /// Runs `operation` on the open session. libsmb2 never reconnects by
+    /// itself and AMSMB2 only does in `connectShare`, so a session that died
+    /// since it was opened (iOS reclaims a suspended app's sockets, the
+    /// phone changed network, the router restarted) is reopened and the
+    /// operation tried once more.
+    private func withConnection<T>(_ operation: () async throws -> T) async throws -> T {
         try await connect()
+        do {
+            return try await operation()
+        } catch let error where Self.isConnectionError(SMBError.code(of: error).0) {
+            invalidate()
+            try await connect()
+            return try await operation()
+        }
+    }
+
+    static func isConnectionError(_ code: Int32) -> Bool {
+        [ENOTCONN, ECONNRESET, ECONNABORTED, EPIPE, ETIMEDOUT, EBADF,
+         ENETDOWN, ENETUNREACH, ENETRESET, EHOSTUNREACH, EHOSTDOWN].contains(code)
+    }
+
+    public func list(_ path: String) async throws -> [FileEntry] {
+        let base = Self.normalize(path)
         let items: [[URLResourceKey: Any]]
         do {
-            items = try await manager.contentsOfDirectory(atPath: Self.normalize(path))
+            items = try await withConnection { try await manager.contentsOfDirectory(atPath: base) }
+        } catch let error as SMBError {
+            throw error
         } catch {
             let (code, detail) = SMBError.code(of: error)
-            throw SMBError.folder(path: Self.normalize(path).isEmpty ? "/" : Self.normalize(path), code: code, detail: detail)
+            // A lost connection isn't the folder's fault, and callers treat
+            // folder errors as "wrong folder" or "nothing there yet".
+            if Self.isConnectionError(code) { throw SMBError.server(host: config.host, code: code, detail: detail) }
+            throw SMBError.folder(path: base.isEmpty ? "/" : base, code: code, detail: detail)
         }
         return items.compactMap { item -> FileEntry? in
             guard let name = item[.nameKey] as? String, name != ".", name != ".." else { return nil }
             let isDir = (item[.isDirectoryKey] as? Bool) ?? false
             let size = (item[.fileSizeKey] as? Int64) ?? Int64((item[.fileSizeKey] as? Int) ?? 0)
-            let base = Self.normalize(path)
             return FileEntry(
                 name: name,
                 path: base.isEmpty ? name : "\(base)/\(name)",
@@ -233,27 +258,36 @@ public final class SMBFileSource: FileSource, ProgressStorage, @unchecked Sendab
 
     /// Whole-file read for small things: subtitles and thumbnails.
     public func read(_ path: String, maxBytes: UInt64 = 20_000_000) async throws -> Data {
-        try await connect()
-        return try await manager.contents(atPath: Self.normalize(path), range: 0..<maxBytes, progress: nil)
+        let path = Self.normalize(path)
+        return try await withConnection {
+            try await manager.contents(atPath: path, range: 0..<maxBytes, progress: nil)
+        }
     }
 
     /// Writes a small file, creating its folders. It goes to a temporary name
     /// first and is renamed into place, so a reader never sees half of it.
     public func replace(_ path: String, with data: Data) async throws {
-        try await connect()
         let path = Self.normalize(path)
-        var folder = ""
-        for part in path.split(separator: "/").dropLast() {
-            folder = folder.isEmpty ? String(part) : "\(folder)/\(part)"
-            // Already there is the usual case; a real problem (a read-only
-            // login) shows up in the write below.
-            try? await manager.createDirectory(atPath: folder)
+        try await withConnection {
+            var folder = ""
+            for part in path.split(separator: "/").dropLast() {
+                folder = folder.isEmpty ? String(part) : "\(folder)/\(part)"
+                // Already there is the usual case; a real problem (a read-only
+                // login) shows up in the write below.
+                try? await manager.createDirectory(atPath: folder)
+            }
+            let temp = path + ".tmp"
+            try? await manager.removeItem(atPath: temp)
+            try await manager.write(data: data, toPath: temp, progress: nil)
+            try? await manager.removeItem(atPath: path)
+            try await manager.moveItem(atPath: temp, toPath: path)
         }
-        let temp = path + ".tmp"
-        try? await manager.removeItem(atPath: temp)
-        try await manager.write(data: data, toPath: temp, progress: nil)
-        try? await manager.removeItem(atPath: path)
-        try await manager.moveItem(atPath: temp, toPath: path)
+    }
+
+    /// Makes the next request check the session is still alive (and open a
+    /// new one if not), e.g. after the app has been suspended.
+    public func invalidate() {
+        lock.withLock { connection = nil }
     }
 
     public func disconnect() async {
