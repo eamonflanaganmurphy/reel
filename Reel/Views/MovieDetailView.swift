@@ -7,10 +7,10 @@ struct MovieDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                BackdropHeader(ref: video.backdropRef ?? video.posterRef, fallbackRef: video.frameRef)
+                BackdropHeader(ref: video.backdropRef ?? video.posterRef, fallbackRefs: [video.frameRef])
 
                 HStack(alignment: .bottom, spacing: 16) {
-                    ArtworkFrame(ref: video.posterRef, fallbackRef: video.frameRef, fallbackTitle: video.title)
+                    ArtworkFrame(ref: video.posterRef, fallbackRefs: [video.frameRef], fallbackTitle: video.title)
                         .frame(width: 110)
                         .shadow(radius: 8)
                     VStack(alignment: .leading, spacing: 6) {

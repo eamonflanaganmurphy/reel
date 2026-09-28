@@ -50,8 +50,14 @@ final class Show {
         return eps.first ?? sortedEpisodes.first
     }
 
-    /// A frame from the first real episode, for when there's no poster.
-    var frameRef: String? { (sortedEpisodes.first { $0.season != 0 } ?? sortedEpisodes.first)?.frameRef }
+    /// Stand-ins for when there's no poster, best first: an episode's still or
+    /// thumbnail, then frames from the first few episodes, so one file VLC
+    /// can't read doesn't leave the show blank.
+    var fallbackRefs: [String?] {
+        let real = sortedEpisodes.filter { $0.season != 0 }
+        let eps = real.isEmpty ? sortedEpisodes : real
+        return [eps.lazy.compactMap(\.posterRef).first] + eps.prefix(3).map(\.frameRef)
+    }
 
     var hasStarted: Bool { episodes.contains { $0.watched || $0.isInProgress } }
     var lastPlayedAt: Date? { episodes.compactMap(\.lastPlayedAt).max() }
@@ -93,6 +99,9 @@ final class Video {
     var durationSeconds: Double = 0
     var lastPlayedAt: Date?
     var watched: Bool = false
+    /// When position or watched last changed, here or on another install.
+    /// Nil until then; decides which side wins when progress is synced.
+    var progressUpdatedAt: Date?
 
     var show: Show?
 
@@ -147,11 +156,40 @@ final class Video {
         } else {
             positionSeconds = position
         }
+        progressChanged()
     }
 
     func setWatched(_ value: Bool) {
         watched = value
         positionSeconds = 0
         if value { lastPlayedAt = .now }
+        progressChanged()
     }
+
+    /// What goes to the share for this file, once there's anything to say.
+    var watchProgress: WatchProgress? {
+        progressUpdatedAt.map {
+            WatchProgress(position: positionSeconds, duration: durationSeconds, watched: watched, updatedAt: $0)
+        }
+    }
+
+    /// Takes progress from another install if it's newer than what's here.
+    func adopt(_ remote: WatchProgress) {
+        guard remote.updatedAt > (progressUpdatedAt ?? .distantPast) else { return }
+        positionSeconds = remote.position
+        if remote.duration > 0 { durationSeconds = remote.duration }
+        watched = remote.watched
+        lastPlayedAt = max(lastPlayedAt ?? .distantPast, remote.updatedAt)
+        progressUpdatedAt = remote.updatedAt
+    }
+
+    private func progressChanged() {
+        progressUpdatedAt = .now
+        NotificationCenter.default.post(name: .watchProgressChanged, object: nil)
+    }
+}
+
+extension Notification.Name {
+    /// Posted when a video's position or watched state changes on this device.
+    static let watchProgressChanged = Notification.Name("watchProgressChanged")
 }

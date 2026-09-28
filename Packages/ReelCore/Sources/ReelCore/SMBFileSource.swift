@@ -150,7 +150,7 @@ public enum HostResolver {
 
 /// One connection to one share. AMSMB2 queues requests internally, so a
 /// single instance can be shared across tasks.
-public final class SMBFileSource: FileSource, @unchecked Sendable {
+public final class SMBFileSource: FileSource, ProgressStorage, @unchecked Sendable {
     public let config: SMBConfig
     private let manager: SMB2Manager
     private let lock = NSLock()
@@ -235,6 +235,25 @@ public final class SMBFileSource: FileSource, @unchecked Sendable {
     public func read(_ path: String, maxBytes: UInt64 = 20_000_000) async throws -> Data {
         try await connect()
         return try await manager.contents(atPath: Self.normalize(path), range: 0..<maxBytes, progress: nil)
+    }
+
+    /// Writes a small file, creating its folders. It goes to a temporary name
+    /// first and is renamed into place, so a reader never sees half of it.
+    public func replace(_ path: String, with data: Data) async throws {
+        try await connect()
+        let path = Self.normalize(path)
+        var folder = ""
+        for part in path.split(separator: "/").dropLast() {
+            folder = folder.isEmpty ? String(part) : "\(folder)/\(part)"
+            // Already there is the usual case; a real problem (a read-only
+            // login) shows up in the write below.
+            try? await manager.createDirectory(atPath: folder)
+        }
+        let temp = path + ".tmp"
+        try? await manager.removeItem(atPath: temp)
+        try await manager.write(data: data, toPath: temp, progress: nil)
+        try? await manager.removeItem(atPath: path)
+        try await manager.moveItem(atPath: temp, toPath: path)
     }
 
     public func disconnect() async {

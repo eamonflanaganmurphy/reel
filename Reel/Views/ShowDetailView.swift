@@ -11,7 +11,7 @@ struct ShowDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                BackdropHeader(ref: show.backdropRef ?? show.posterRef, fallbackRef: show.frameRef)
+                BackdropHeader(ref: show.backdropRef ?? show.posterRef, fallbackRefs: show.fallbackRefs)
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(show.title).font(.title.bold())
@@ -90,7 +90,11 @@ struct EpisodeRow: View {
     var body: some View {
         Button { playback.play(episode) } label: {
             HStack(alignment: .top, spacing: 12) {
-                ArtworkFrame(ref: episode.posterRef, fallbackRef: episode.frameRef, aspectRatio: 16.0 / 9.0, fallbackSymbol: "play.rectangle", cornerRadius: 6)
+                // No still: a frame from the file, then the show's backdrop,
+                // then a generated card.
+                ArtworkFrame(ref: episode.posterRef, fallbackRefs: [episode.frameRef, episode.show?.backdropRef],
+                             aspectRatio: 16.0 / 9.0, fallbackTitle: episode.show?.title, fallbackSubtitle: episode.episodeCode,
+                             fallbackSymbol: "play.rectangle", cornerRadius: 6)
                     .frame(width: 150)
                     .overlay(alignment: .bottom) {
                         if episode.isInProgress { ProgressBar(value: episode.progress).padding(5) }

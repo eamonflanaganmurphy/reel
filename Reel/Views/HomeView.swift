@@ -20,7 +20,7 @@ struct HomeView: View {
     private var shows: [Show]
 
     /// For each show you're partway through, the next episode - unless it's
-    /// already in Continue Watching.
+    /// already in Keep Watching.
     private var upNext: [Video] {
         let continuing = Set(inProgress.map(\.path))
         return shows
@@ -36,7 +36,7 @@ struct HomeView: View {
                 statusBanner
 
                 if !inProgress.isEmpty {
-                    ShelfRow(title: "Continue Watching", items: inProgress, cardWidth: 240) { video in
+                    ShelfRow(title: "Keep Watching", items: inProgress, cardWidth: 240) { video in
                         Button { playback.play(video) } label: { WideCard(video: video) }
                             .buttonStyle(.plain)
                             .contextMenu { watchedMenu(video) }
@@ -75,7 +75,7 @@ struct HomeView: View {
             if !recent.isEmpty {
                 ShelfRow(title: "Recently Added · \(library.name)", items: recent) { movie in
                     NavigationLink(value: movie) {
-                        PosterCard(ref: movie.posterRef, fallbackRef: movie.frameRef, title: movie.title, subtitle: movie.year.map(String.init),
+                        PosterCard(ref: movie.posterRef, fallbackRefs: [movie.frameRef], title: movie.title, subtitle: movie.year.map(String.init),
                                    progress: movie.isInProgress ? movie.progress : 0, watched: movie.watched)
                     }
                     .buttonStyle(.plain)
@@ -86,7 +86,7 @@ struct HomeView: View {
             if !recent.isEmpty {
                 ShelfRow(title: "Recently Updated · \(library.name)", items: recent) { show in
                     NavigationLink(value: show) {
-                        PosterCard(ref: show.posterRef, fallbackRef: show.frameRef, title: show.title,
+                        PosterCard(ref: show.posterRef, fallbackRefs: show.fallbackRefs, title: show.title,
                                    subtitle: "\(show.episodes.count) episodes", symbol: "tv")
                     }
                     .buttonStyle(.plain)

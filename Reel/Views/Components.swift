@@ -3,7 +3,7 @@ import SwiftUI
 /// Poster with title underneath, for grids and rows.
 struct PosterCard: View {
     let ref: String?
-    var fallbackRef: String?
+    var fallbackRefs: [String?] = []
     let title: String
     var subtitle: String?
     var progress: Double = 0
@@ -12,7 +12,7 @@ struct PosterCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ArtworkFrame(ref: ref, fallbackRef: fallbackRef, fallbackTitle: title, fallbackSymbol: symbol)
+            ArtworkFrame(ref: ref, fallbackRefs: fallbackRefs, fallbackTitle: title, fallbackSymbol: symbol)
                 .overlay(alignment: .topTrailing) {
                     if watched { WatchedBadge().padding(6) }
                 }
@@ -27,14 +27,15 @@ struct PosterCard: View {
     }
 }
 
-/// 16:9 card for Continue Watching / Up Next.
+/// 16:9 card for Keep Watching / Up Next.
 struct WideCard: View {
     let video: Video
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ArtworkFrame(ref: video.backdropRef ?? video.posterRef ?? video.show?.backdropRef,
-                         fallbackRef: video.frameRef, aspectRatio: 16.0 / 9.0, fallbackTitle: video.displayTitle)
+                         fallbackRefs: [video.frameRef], aspectRatio: 16.0 / 9.0, fallbackTitle: video.displayTitle,
+                         fallbackSubtitle: video.isMovie ? nil : video.episodeCode, fallbackSymbol: video.isMovie ? "film" : "tv")
                 .overlay(alignment: .bottom) {
                     if video.progress > 0 { ProgressBar(value: video.progress).padding(8) }
                 }
@@ -93,11 +94,11 @@ struct ShelfRow<Item: Identifiable, Card: View>: View {
 /// Backdrop that fades into the background, for detail pages.
 struct BackdropHeader: View {
     let ref: String?
-    var fallbackRef: String?
+    var fallbackRefs: [String?] = []
     var fallbackTitle: String?
 
     var body: some View {
-        ArtworkFrame(ref: ref, fallbackRef: fallbackRef, aspectRatio: 16.0 / 9.0, fallbackTitle: nil, fallbackSymbol: "photo", cornerRadius: 0)
+        ArtworkFrame(ref: ref, fallbackRefs: fallbackRefs, aspectRatio: 16.0 / 9.0, fallbackTitle: nil, fallbackSymbol: "photo", cornerRadius: 0)
             .overlay {
                 LinearGradient(colors: [.clear, .clear, Color(uiColor: .systemBackground)],
                                startPoint: .top, endPoint: .bottom)

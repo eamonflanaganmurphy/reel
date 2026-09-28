@@ -99,16 +99,19 @@ actor ArtworkStore {
 }
 
 /// An image from a posterRef/backdropRef, filling whatever frame it's given.
-/// `fallbackRef` is tried when `ref` is missing or won't load, normally a
-/// frame from the video.
+/// `fallbackRefs` are tried in order when `ref` is missing or won't load,
+/// normally frames from the video. If none of them loads, a title card is
+/// generated so nothing is left blank.
 struct ArtworkImage: View {
     let ref: String?
-    var fallbackRef: String?
+    var fallbackRefs: [String?] = []
     var fallbackTitle: String?
+    var fallbackSubtitle: String?
     var fallbackSymbol = "film"
 
     @Environment(AppSettings.self) private var settings
     @State private var image: UIImage?
+    @State private var exhausted = false
 
     var body: some View {
         ZStack {
@@ -116,6 +119,9 @@ struct ArtworkImage: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
+                    .transition(.opacity)
+            } else if exhausted {
+                GeneratedArtwork(title: fallbackTitle, subtitle: fallbackSubtitle, symbol: fallbackSymbol)
                     .transition(.opacity)
             } else {
                 LinearGradient(colors: [Color(white: 0.22), Color(white: 0.12)], startPoint: .top, endPoint: .bottom)
@@ -132,15 +138,69 @@ struct ArtworkImage: View {
                 }
             }
         }
-        .task(id: [ref, fallbackRef]) {
-            var loaded = await ArtworkStore.shared.image(for: ref, config: settings.smbConfig)
-            if loaded == nil, !Task.isCancelled {
-                loaded = await ArtworkStore.shared.image(for: fallbackRef, config: settings.smbConfig)
+        .task(id: [ref] + fallbackRefs) {
+            exhausted = false
+            var loaded: UIImage?
+            for candidate in [ref] + fallbackRefs where loaded == nil {
+                guard !Task.isCancelled else { return }
+                loaded = await ArtworkStore.shared.image(for: candidate, config: settings.smbConfig)
             }
             // A superseded load mustn't blank what its replacement shows.
             guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.2)) { image = loaded }
+            withAnimation(.easeOut(duration: 0.2)) {
+                image = loaded
+                exhausted = loaded == nil
+            }
         }
+    }
+}
+
+/// A title card for things with no artwork anywhere, not even a readable
+/// frame. The colour comes from the title, so a show keeps the same one.
+struct GeneratedArtwork: View {
+    var title: String?
+    var subtitle: String?
+    var symbol = "film"
+
+    var body: some View {
+        let hue = Self.hue(for: title ?? "")
+        ZStack {
+            LinearGradient(colors: [Color(hue: hue, saturation: 0.5, brightness: 0.5),
+                                    Color(hue: (hue + 0.08).truncatingRemainder(dividingBy: 1), saturation: 0.6, brightness: 0.2)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            GeometryReader { geo in
+                Image(systemName: symbol)
+                    .font(.system(size: min(geo.size.width, geo.size.height) * 0.6))
+                    .foregroundStyle(.white.opacity(0.08))
+                    .frame(width: geo.size.width, height: geo.size.height, alignment: .bottomTrailing)
+                    .offset(x: geo.size.width * 0.12, y: geo.size.height * 0.08)
+            }
+            if title != nil || subtitle != nil {
+                VStack(spacing: 4) {
+                    if let title {
+                        Text(title)
+                            .font(.subheadline.weight(.bold))
+                            .lineLimit(4)
+                    }
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.caption2.weight(.semibold))
+                            .opacity(0.75)
+                            .lineLimit(1)
+                    }
+                }
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.white)
+                .minimumScaleFactor(0.6)
+                .padding(8)
+            }
+        }
+    }
+
+    /// Stable across launches, unlike `hashValue`.
+    private static func hue(for title: String) -> Double {
+        let seed = title.unicodeScalars.reduce(UInt32(5381)) { ($0 &<< 5) &+ $0 &+ $1.value }
+        return Double(seed % 360) / 360
     }
 }
 
@@ -148,16 +208,20 @@ struct ArtworkImage: View {
 /// overflows its frame in a grid.
 struct ArtworkFrame: View {
     let ref: String?
-    var fallbackRef: String?
+    var fallbackRefs: [String?] = []
     var aspectRatio: CGFloat = 2.0 / 3.0
     var fallbackTitle: String?
+    var fallbackSubtitle: String?
     var fallbackSymbol = "film"
     var cornerRadius: CGFloat = 8
 
     var body: some View {
         Color.clear
             .aspectRatio(aspectRatio, contentMode: .fit)
-            .overlay { ArtworkImage(ref: ref, fallbackRef: fallbackRef, fallbackTitle: fallbackTitle, fallbackSymbol: fallbackSymbol) }
+            .overlay {
+                ArtworkImage(ref: ref, fallbackRefs: fallbackRefs, fallbackTitle: fallbackTitle,
+                             fallbackSubtitle: fallbackSubtitle, fallbackSymbol: fallbackSymbol)
+            }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }

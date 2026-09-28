@@ -5,6 +5,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(LibrarySync.self) private var sync
+    @Environment(ProgressSync.self) private var progress
     @Environment(\.modelContext) private var context
 
     @State private var testResult: TestResult?
@@ -144,6 +145,24 @@ struct SettingsView: View {
                 Text("Posters & Descriptions (TMDB)")
             } footer: {
                 Text("Optional. Without a key, titles come from the file names and there's no artwork.")
+            }
+
+            Section {
+                switch progress.status {
+                case .idle:
+                    Label("Not synced yet", systemImage: "arrow.triangle.2.circlepath")
+                        .foregroundStyle(.secondary)
+                case .synced(let date):
+                    Label("Synced \(date.formatted(date: .omitted, time: .shortened))", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                case .failed(let message):
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+            } header: {
+                Text("Watch Progress")
+            } footer: {
+                Text("Where you got to in each video is saved in a hidden .reel folder on the share, so every phone running Reel picks up in the same place. The login needs permission to write to the share.")
             }
 
             Section {

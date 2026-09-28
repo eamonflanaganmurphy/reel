@@ -8,7 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		0632A9E35EBB9E024103253E /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5B8A6B96232CDA479CE8A3B /* SettingsView.swift */; };
+		22AA365AEC287FC26F0A2B00 /* ProgressSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EA204D451FAE4960360ECC5 /* ProgressSync.swift */; };
 		26695C3FB8B8DCA13536A930 /* FolderBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED609B3C422D7231300412C7 /* FolderBrowser.swift */; };
+		2BDED62518C5F00EE75D20D9 /* FrameGrabber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 194E3E9CC2FBAA25AC994156 /* FrameGrabber.swift */; };
 		38C2F055B0440CD78C3CF739 /* ShowDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6428B740987B39504225BD6A /* ShowDetailView.swift */; };
 		51F98C00395F5FC50A1A33D4 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C7F67623317E3959B0E334F /* HomeView.swift */; };
 		574A6DA0AAACDC66BA9C5373 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58F7ACED675EFCC23ADD9896 /* Models.swift */; };
@@ -22,7 +24,6 @@
 		A21EBBA46C0C52A3DF5B5FBA /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 117405A8481697097751510B /* RootView.swift */; };
 		AD75B0F6230C3DEDA2ABAD78 /* VLCKitSPM in Frameworks */ = {isa = PBXBuildFile; productRef = C33CB0A54E63ABCEF947CA10 /* VLCKitSPM */; };
 		B50FDBC8AA8DDB4F3C8D67DE /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5125BF7832A8883838DED6B /* Components.swift */; };
-		C9D8E418321949A3810036EF /* FrameGrabber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50745C55528A62B2E38FB897 /* FrameGrabber.swift */; };
 		CA63CFE07B7DCB9FEB61E5B3 /* PlayerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E1FF8E6B66FEAE5BA2CBF54 /* PlayerController.swift */; };
 		D1B818A2CAFC77E5C8229072 /* MovieDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175B90C50D1D44A981B175B7 /* MovieDetailView.swift */; };
 		DC8A159E0CFDA37EF08EF779 /* ServerBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F455BDF0C047F904BFE725E /* ServerBrowser.swift */; };
@@ -33,6 +34,8 @@
 		0AAF0D94AFB0965BD3E79B90 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		117405A8481697097751510B /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		175B90C50D1D44A981B175B7 /* MovieDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovieDetailView.swift; sourceTree = "<group>"; };
+		194E3E9CC2FBAA25AC994156 /* FrameGrabber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameGrabber.swift; sourceTree = "<group>"; };
+		2EA204D451FAE4960360ECC5 /* ProgressSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressSync.swift; sourceTree = "<group>"; };
 		346DD0051301F4B40419BA67 /* ReelCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ReelCore; path = Packages/ReelCore; sourceTree = SOURCE_ROOT; };
 		50D28815073169346E88B06C /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		58F7ACED675EFCC23ADD9896 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -41,7 +44,6 @@
 		6C7F67623317E3959B0E334F /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		6D28B05F3E3322E261FDEEEB /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		79F565BAF7B28F9E3EC54A3F /* ReelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReelApp.swift; sourceTree = "<group>"; };
-		50745C55528A62B2E38FB897 /* FrameGrabber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameGrabber.swift; sourceTree = "<group>"; };
 		7E1FF8E6B66FEAE5BA2CBF54 /* PlayerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerController.swift; sourceTree = "<group>"; };
 		C7C4CAA7CFF687FF8B6724FD /* Reel.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Reel.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CEF0A3EA11E64E1138F3C33D /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
@@ -90,6 +92,7 @@
 				DEC7E30578769C84FB07BFA7 /* Artwork.swift */,
 				CFE2925315D4271AACA8FF00 /* LibrarySync.swift */,
 				58F7ACED675EFCC23ADD9896 /* Models.swift */,
+				2EA204D451FAE4960360ECC5 /* ProgressSync.swift */,
 				5F455BDF0C047F904BFE725E /* ServerBrowser.swift */,
 			);
 			path = Model;
@@ -134,7 +137,7 @@
 		D69E52F4D3D0C331637E20AD /* Player */ = {
 			isa = PBXGroup;
 			children = (
-				50745C55528A62B2E38FB897 /* FrameGrabber.swift */,
+				194E3E9CC2FBAA25AC994156 /* FrameGrabber.swift */,
 				7E1FF8E6B66FEAE5BA2CBF54 /* PlayerController.swift */,
 				FAFE47A2692ABE777C49988A /* PlayerScreen.swift */,
 			);
@@ -181,7 +184,6 @@
 				};
 			};
 			buildConfigurationList = EE787DA360354CF0E26195FE /* Build configuration list for PBXProject "Reel" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -195,6 +197,7 @@
 				6BEEC89511B53A68F157C633 /* XCLocalSwiftPackageReference "Packages/ReelCore" */,
 			);
 			preferredProjectObjectVersion = 77;
+			productRefGroup = 9330200A569ED5477874D824 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -223,14 +226,15 @@
 				7F89A7C60100AD5372694FFC /* Artwork.swift in Sources */,
 				B50FDBC8AA8DDB4F3C8D67DE /* Components.swift in Sources */,
 				26695C3FB8B8DCA13536A930 /* FolderBrowser.swift in Sources */,
+				2BDED62518C5F00EE75D20D9 /* FrameGrabber.swift in Sources */,
 				51F98C00395F5FC50A1A33D4 /* HomeView.swift in Sources */,
 				6BDE290D2AB09DB308721A04 /* LibrarySync.swift in Sources */,
 				FFF5E72F8EDA28E354FF4668 /* LibraryView.swift in Sources */,
 				574A6DA0AAACDC66BA9C5373 /* Models.swift in Sources */,
 				D1B818A2CAFC77E5C8229072 /* MovieDetailView.swift in Sources */,
-				C9D8E418321949A3810036EF /* FrameGrabber.swift in Sources */,
 				CA63CFE07B7DCB9FEB61E5B3 /* PlayerController.swift in Sources */,
 				6AD5DFEB420F480A97C55E13 /* PlayerScreen.swift in Sources */,
+				22AA365AEC287FC26F0A2B00 /* ProgressSync.swift in Sources */,
 				7799BB781813431DEA4F182B /* ReelApp.swift in Sources */,
 				A21EBBA46C0C52A3DF5B5FBA /* RootView.swift in Sources */,
 				DC8A159E0CFDA37EF08EF779 /* ServerBrowser.swift in Sources */,

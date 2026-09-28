@@ -5,10 +5,15 @@ share (a mirror of Bucket_A). It connects straight to the share, so there's no
 server software involved: the app lists the folders itself, looks titles up on
 TMDB, and plays the files with VLC. Nothing is transcoded.
 
-- **Library:** Home (Continue Watching, Up Next, Recently Added), plus a poster grid per library
+- **Library:** Home (Keep Watching, Up Next, Recently Added), plus a poster grid per library
+- **Watch progress on the share:** where you got to in each video is kept in a hidden `.reel/progress` folder on
+  the share, so every phone running Reel (or a reinstall) resumes in the same place and shows the same Keep Watching.
+  Each install writes its own file and the newest entry wins, so the SMB login needs write access.
 - **Detail pages:** movie and show pages with seasons, episode stills and descriptions
 - **Thumbnails:** anything without a TMDB poster or episode still shows a frame from the video itself. Frames are
   taken one at a time, wait while a scan or playback is running, and are cached, so each file is only read once.
+  A show tries an episode still, then frames from its first three episodes; an episode with no readable frame uses the
+  show's backdrop. If nothing loads at all, a title card is generated, so every show and episode has a picture.
 - **Playback:** resume and watch progress, autoplay of the next episode, audio and subtitle track choice. Sidecar `.srt` files from Bazarr are picked up automatically.
 - **Formats:** everything on Bucket_A plays: MKV/MP4/WebM/AVI, H.264/HEVC/AV1/Xvid, DTS/E-AC3/Opus, and SRT/ASS/PGS/DVD subtitles.
 
