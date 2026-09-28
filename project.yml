@@ -17,7 +17,7 @@ settings:
     SWIFT_VERSION: "5.0"
     CODE_SIGN_STYLE: Automatic
     # Set your team in Xcode (Signing & Capabilities); a free Apple ID works.
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: LHVC7499G5
 targets:
   Reel:
     type: application
