@@ -9,37 +9,72 @@ import VLCKitSPM
 ///
 /// Strictly one at a time, and held while a scan or playback is using the
 /// share: the router is a small ARM box whose Samba has fallen over under
-/// parallel reads before. Queued grabs whose view has scrolled away are
-/// dropped when their turn comes rather than read.
+/// parallel reads before. Grabs whose view has scrolled away are dropped
+/// when their turn comes, or stopped if VLC is already reading.
 @MainActor
 final class FrameGrabber: NSObject {
     static let shared = FrameGrabber()
 
-    /// Set while a scan or playback is running. Grabs already on screen stay
-    /// queued and start once it clears.
+    /// Set while a scan or playback is running. A grab under way is stopped
+    /// and goes back in the queue; queued grabs start once it clears.
     var paused = false {
-        didSet { pump() }
+        didSet {
+            if paused { current?.interrupt() }
+            pump()
+        }
     }
 
     private var running = false
+    private var current: Snapshot?
     private var queue: [CheckedContinuation<Void, Never>] = []
     /// Files VLC couldn't get a frame from this session, so a grid doesn't
     /// retry them on every scroll past.
     private var failed: Set<String> = []
+    /// Set when a grab failed because the share itself was out of reach
+    /// (away from home, router restarting). Until then grabs are skipped
+    /// rather than each waiting out VLC's timeout, and nothing is marked
+    /// failed, so frames come back once the share does.
+    private var offlineUntil = Date.distantPast
 
     /// JPEG of a frame from the file at `path`, or nil if there isn't one to
     /// be had (or the caller stopped waiting).
     func jpeg(for path: String, config: SMBConfig) async -> Data? {
         guard !failed.contains(path), let url = config.playbackURL(for: path) else { return nil }
-        await withCheckedContinuation { (turn: CheckedContinuation<Void, Never>) in queue.append(turn); pump() }
-        defer { running = false; pump() }
-        guard !Task.isCancelled else { return nil }
+        while true {
+            guard Date() >= offlineUntil else { return nil }
+            await withCheckedContinuation { (turn: CheckedContinuation<Void, Never>) in queue.append(turn); pump() }
+            defer { running = false; pump() }
+            guard !Task.isCancelled, Date() >= offlineUntil else { return nil }
 
-        guard let frame = await Snapshot(url: url).take() else {
-            failed.insert(path)
-            return nil
+            let snapshot = Snapshot(url: url)
+            current = snapshot
+            let frame = await withTaskCancellationHandler {
+                await snapshot.take()
+            } onCancel: {
+                Task { @MainActor in snapshot.interrupt() }
+            }
+            current = nil
+            if Task.isCancelled { return nil }
+            // Paused mid-grab: queue up again for when the share is free.
+            if snapshot.interrupted { continue }
+
+            guard let frame else {
+                if await shareIsReachable(path, config: config) {
+                    failed.insert(path)
+                } else {
+                    offlineUntil = Date().addingTimeInterval(60)
+                }
+                return nil
+            }
+            return frame.jpegData(compressionQuality: 0.8)
         }
-        return frame.jpegData(compressionQuality: 0.8)
+    }
+
+    /// Whether a failed grab was the file's fault or the share's. Runs while
+    /// this grab still holds its turn, so it's never alongside another read.
+    private func shareIsReachable(_ path: String, config: SMBConfig) async -> Bool {
+        guard let source = try? ServerConnection.shared.source(for: config) else { return false }
+        return (try? await source.list((path as NSString).deletingLastPathComponent)) != nil
     }
 
     private func pump() {
@@ -66,6 +101,8 @@ private final class Snapshot: NSObject, VLCMediaPlayerDelegate {
     private var seeked = false
     private var ticksSinceSeek = 0
     private var requestedAt: Date?
+    /// Stopped early (paused or no longer wanted) rather than failed.
+    private(set) var interrupted = false
 
     init(url: URL) {
         super.init()
@@ -92,11 +129,17 @@ private final class Snapshot: NSObject, VLCMediaPlayerDelegate {
         }
     }
 
+    func interrupt() {
+        guard done != nil else { return }
+        interrupted = true
+        finish(nil)
+    }
+
     private func finish(_ image: UIImage?) {
         guard let done else { return }
         self.done = nil
         player.delegate = nil
-        player.stop()
+        player.stopInBackground()
         try? FileManager.default.removeItem(at: file)
         done.resume(returning: image)
     }

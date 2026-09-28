@@ -218,8 +218,14 @@ final class LibrarySync {
             let pending = show.episodes.filter { !$0.metadataFetched }
             for season in Set(pending.map(\.season)).sorted() {
                 // A missing season (TMDB numbers it differently) shouldn't
-                // stop the rest of the library.
-                let details = try? await client.season(showID: tmdbID, number: season)
+                // stop the rest of the library. Anything else, e.g. a network
+                // blip, leaves the episodes to be looked up next time.
+                let details: TMDBSeason?
+                do {
+                    details = try await client.season(showID: tmdbID, number: season)
+                } catch TMDBError.http(404) {
+                    details = nil
+                }
                 let byNumber = Dictionary((details?.episodes ?? []).map { ($0.episodeNumber, $0) }, uniquingKeysWith: { a, _ in a })
                 for video in pending where video.season == season {
                     if let n = video.episode, let ep = byNumber[n] {

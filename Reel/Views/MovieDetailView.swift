@@ -2,7 +2,20 @@ import SwiftUI
 
 struct MovieDetailView: View {
     @Bindable var video: Video
-    @Environment(PlaybackCenter.self) private var playback
+
+    var body: some View {
+        // A scan deletes a movie whose file has gone; this page may still be open.
+        if video.modelContext == nil {
+            ContentUnavailableView("No Longer on the Share", systemImage: "film",
+                                   description: Text("This file was removed or renamed."))
+        } else {
+            MoviePage(video: video)
+        }
+    }
+}
+
+private struct MoviePage: View {
+    @Bindable var video: Video
 
     var body: some View {
         ScrollView {

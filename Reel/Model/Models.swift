@@ -35,27 +35,36 @@ final class Show {
         }
     }
 
-    var seasons: [Int] { Array(Set(episodes.map(\.season))).sorted { season0Last($0, $1) } }
+    var seasons: [Int] { Self.seasons(of: episodes) }
+
+    static func seasons(of episodes: [Video]) -> [Int] {
+        Array(Set(episodes.map(\.season))).sorted { season0Last($0, $1) }
+    }
 
     /// The episode to offer on the show page: one in progress, else the one
     /// after the last watched, else the first.
-    var nextUp: Video? {
-        let eps = sortedEpisodes.filter { $0.season != 0 }
+    var nextUp: Video? { Self.nextUp(in: sortedEpisodes) }
+
+    /// `nextUp` from episodes already in `sortedEpisodes` order, for views
+    /// that need several of these at once and shouldn't sort for each.
+    static func nextUp(in sorted: [Video]) -> Video? {
+        let eps = sorted.filter { $0.season != 0 }
         if let inProgress = eps.filter({ $0.isInProgress }).max(by: { ($0.lastPlayedAt ?? .distantPast) < ($1.lastPlayedAt ?? .distantPast) }) {
             return inProgress
         }
         if let lastWatched = eps.lastIndex(where: \.watched) {
             return eps.indices.contains(lastWatched + 1) ? eps[lastWatched + 1] : nil
         }
-        return eps.first ?? sortedEpisodes.first
+        return eps.first ?? sorted.first
     }
 
     /// Stand-ins for when there's no poster, best first: an episode's still or
     /// thumbnail, then frames from the first few episodes, so one file VLC
     /// can't read doesn't leave the show blank.
     var fallbackRefs: [String?] {
-        let real = sortedEpisodes.filter { $0.season != 0 }
-        let eps = real.isEmpty ? sortedEpisodes : real
+        let sorted = sortedEpisodes
+        let real = sorted.filter { $0.season != 0 }
+        let eps = real.isEmpty ? sorted : real
         return [eps.lazy.compactMap(\.posterRef).first] + eps.prefix(3).map(\.frameRef)
     }
 
@@ -143,18 +152,27 @@ final class Video {
     }
 
     /// Records playback. Near the end counts as watched and resets the
-    /// position, the way every streaming app does.
+    /// position, the way every streaming app does. Getting properly into
+    /// something already watched makes it a rewatch in progress, so it gets a
+    /// resume point and shows in Keep Watching.
     func recordProgress(position: Double, duration: Double) {
         if duration > 0 { durationSeconds = duration }
         lastPlayedAt = .now
-        let remaining = durationSeconds - position
-        if durationSeconds > 0, position / durationSeconds > 0.92 || (remaining < 120 && durationSeconds > 600) {
+        if Self.isFinished(position: position, duration: durationSeconds) {
             watched = true
             positionSeconds = 0
         } else {
+            if position > 30 { watched = false }
             positionSeconds = position
         }
         progressChanged()
+    }
+
+    /// Close enough to the end to count as watched: past 92%, or into the
+    /// last two minutes (credits) of anything over ten.
+    static func isFinished(position: Double, duration: Double) -> Bool {
+        guard duration > 0 else { return false }
+        return position / duration > 0.92 || (duration - position < 120 && duration > 600)
     }
 
     func setWatched(_ value: Bool) {

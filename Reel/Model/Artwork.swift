@@ -22,6 +22,12 @@ final class ServerConnection: @unchecked Sendable {
         }
     }
 
+    /// After the app has been suspended its session may be dead; the next
+    /// request checks and reconnects.
+    func invalidate() {
+        lock.withLock { source }?.invalidate()
+    }
+
     /// Copies a file from the share into Caches, e.g. a subtitle for VLC.
     func download(_ path: String, config: SMBConfig) async throws -> URL {
         let data = try await source(for: config).read(path)
@@ -40,37 +46,90 @@ actor ArtworkStore {
     static let shared = ArtworkStore()
 
     private let memory = NSCache<NSString, UIImage>()
-    private var inFlight: [String: Task<UIImage?, Never>] = [:]
+    private var inFlight: [String: Load] = [:]
     private let directory: URL
+
+    /// One fetch, shared by every view that wants the same image. It's only
+    /// cancelled once all of them have stopped waiting, so one cell scrolling
+    /// away doesn't leave another showing a title card instead of the art.
+    private struct Load {
+        let task: Task<UIImage?, Never>
+        var waiters: Int
+    }
+
+    /// Longest side kept in memory. TMDB backdrops and posters on the share
+    /// can be far bigger than any place they're drawn.
+    private static let maxPixels: CGFloat = 1280
 
     init() {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         directory = caches.appendingPathComponent("artwork", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         memory.countLimit = 300
+        // Decoded bitmaps, not files: a 1280x720 backdrop is ~3.7 MB.
+        memory.totalCostLimit = 150_000_000
     }
 
     func image(for ref: String?, config: SMBConfig) async -> UIImage? {
         guard let ref, !ref.isEmpty else { return nil }
         if let hit = memory.object(forKey: ref as NSString) { return hit }
-        if let running = inFlight[ref] { return await running.value }
 
-        let file = directory.appendingPathComponent(Self.fileName(for: ref))
-        let task = Task<UIImage?, Never> {
-            if let data = try? Data(contentsOf: file), let image = UIImage(data: data) {
-                return await image.byPreparingForDisplay() ?? image
+        let task: Task<UIImage?, Never>
+        if var running = inFlight[ref] {
+            running.waiters += 1
+            inFlight[ref] = running
+            task = running.task
+        } else {
+            let file = directory.appendingPathComponent(Self.fileName(for: ref))
+            // Detached so disk reads and decoding don't queue up on this actor.
+            task = Task.detached(priority: .userInitiated) {
+                if let data = try? Data(contentsOf: file), let image = UIImage(data: data) {
+                    return await Self.prepare(image)
+                }
+                guard let data = await Self.fetch(ref, config: config), let image = UIImage(data: data) else { return nil }
+                try? data.write(to: file, options: .atomic)
+                return await Self.prepare(image)
             }
-            guard let data = await Self.fetch(ref, config: config), let image = UIImage(data: data) else { return nil }
-            try? data.write(to: file, options: .atomic)
-            return await image.byPreparingForDisplay() ?? image
+            inFlight[ref] = Load(task: task, waiters: 1)
         }
-        inFlight[ref] = task
         // Scrolling past stops the fetch, which for a video frame means VLC
-        // never opens the file.
-        let image = await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
-        inFlight[ref] = nil
-        if let image { memory.setObject(image, forKey: ref as NSString) }
+        // never opens the file (or stops reading it).
+        let image = await withTaskCancellationHandler { await task.value } onCancel: {
+            Task { await self.stopWaiting(for: ref, task: task) }
+        }
+        if inFlight[ref]?.task == task { inFlight[ref] = nil }
+        if let image {
+            memory.setObject(image, forKey: ref as NSString, cost: Self.cost(of: image))
+        }
         return image
+    }
+
+    private func stopWaiting(for ref: String, task: Task<UIImage?, Never>) {
+        guard var load = inFlight[ref], load.task == task else { return }
+        load.waiters -= 1
+        if load.waiters > 0 {
+            inFlight[ref] = load
+        } else {
+            inFlight[ref] = nil
+            task.cancel()
+        }
+    }
+
+    /// Decoded ahead of display, and scaled down if it's bigger than needed.
+    private static func prepare(_ image: UIImage) async -> UIImage {
+        let size = image.size
+        let longest = max(size.width, size.height)
+        if longest > maxPixels {
+            let scale = maxPixels / longest
+            let target = CGSize(width: (size.width * scale).rounded(), height: (size.height * scale).rounded())
+            if let small = await image.byPreparingThumbnail(ofSize: target) { return small }
+        }
+        return await image.byPreparingForDisplay() ?? image
+    }
+
+    private static func cost(of image: UIImage) -> Int {
+        guard let cg = image.cgImage else { return Int(image.size.width * image.size.height * image.scale * image.scale * 4) }
+        return cg.bytesPerRow * cg.height
     }
 
     func clear() {

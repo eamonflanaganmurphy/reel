@@ -49,7 +49,7 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
 
     deinit {
         player.delegate = nil
-        player.stop()
+        player.stopInBackground()
     }
 
     func load(_ url: URL, startAt seconds: Double) {
@@ -102,7 +102,7 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
     }
 
     func stop() {
-        player.stop()
+        player.stopInBackground()
     }
 
     // MARK: VLCMediaPlayerDelegate
@@ -147,7 +147,18 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
             refreshTracks()
         case .ended:
             isPlaying = false
-            onEnded?()
+            isBuffering = false
+            // Time updates are throttled; take the last position VLC has, so
+            // progress saved from here agrees with the check below.
+            let last = Double(player.time.intValue) / 1000
+            if last > currentTime { currentTime = last }
+            if reachedEnd {
+                onEnded?()
+            } else {
+                // VLC also "ends" a stream the router stopped sending partway,
+                // which mustn't mark the video watched and skip to the next.
+                errorMessage = "Lost the connection to the share. Check the server is reachable, then try again."
+            }
         case .error:
             isPlaying = false
             isBuffering = false
@@ -158,6 +169,13 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
             break
         }
         if let length = player.media?.length.intValue, length > 0 { duration = Double(length) / 1000 }
+    }
+
+    /// Near enough the end to count as finished, by the same rule that
+    /// marks a video watched. With no length known there's no telling.
+    private var reachedEnd: Bool {
+        guard duration > 0 else { return true }
+        return Video.isFinished(position: currentTime, duration: duration)
     }
 
     private func refreshTracks() {
@@ -173,4 +191,15 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
             return MediaTrack(id: id, name: (name as? String) ?? "Track \(id)")
         }
     }
+}
+
+extension VLCMediaPlayer {
+    /// VLCKit 3's `stop` waits for VLC's input thread to finish, which can
+    /// take as long as an SMB read takes to time out. Off the main thread, a
+    /// stalled share can't freeze the app. One queue, so stops never overlap.
+    func stopInBackground() {
+        VLCMediaPlayer.stopQueue.async { self.stop() }
+    }
+
+    private static let stopQueue = DispatchQueue(label: "Reel.VLCStop", qos: .userInitiated)
 }

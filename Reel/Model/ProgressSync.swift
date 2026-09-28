@@ -84,10 +84,10 @@ final class ProgressSync {
     func pushNow() {
         guard dirty else { return }
         pending?.cancel()
-        let background = UIApplication.shared.beginBackgroundTask(withName: "Save watch progress")
+        let background = BackgroundTask(name: "Save watch progress")
         pending = Task {
             await push()
-            UIApplication.shared.endBackgroundTask(background)
+            background.end()
         }
     }
 
@@ -103,7 +103,12 @@ final class ProgressSync {
     private func push() async {
         guard let settings, let context, settings.isConfigured, dirty else { return }
         // A pull in progress finishes first, so its results go out too.
-        while busy { try? await Task.sleep(for: .milliseconds(200)) }
+        while busy {
+            try? await Task.sleep(for: .milliseconds(200))
+            // Superseded by a newer push, which will send this change too.
+            // (A cancelled sleep returns at once, so this would spin.)
+            if Task.isCancelled { return }
+        }
         busy = true
         defer { busy = false }
         dirty = false
@@ -132,5 +137,23 @@ final class ProgressSync {
         try? context.save()
         dirty = true
         schedulePush(after: 5)
+    }
+}
+
+/// Extra time in the background, handed back when the work is done or, if
+/// the share is too slow to answer, when iOS says time is up. Holding on past
+/// that gets the app killed.
+@MainActor
+private final class BackgroundTask {
+    private var id = UIBackgroundTaskIdentifier.invalid
+
+    init(name: String) {
+        id = UIApplication.shared.beginBackgroundTask(withName: name) { [self] in end() }
+    }
+
+    func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
     }
 }

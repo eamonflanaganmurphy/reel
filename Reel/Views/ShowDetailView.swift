@@ -2,13 +2,34 @@ import SwiftUI
 
 struct ShowDetailView: View {
     @Bindable var show: Show
-    @Environment(PlaybackCenter.self) private var playback
-    @State private var season: Int?
-
-    private var selectedSeason: Int { season ?? show.nextUp?.season ?? show.seasons.first ?? 1 }
-    private var episodes: [Video] { show.sortedEpisodes.filter { $0.season == selectedSeason } }
 
     var body: some View {
+        // A scan deletes a show whose folder has gone; this page may still be open.
+        if show.modelContext == nil {
+            ContentUnavailableView("No Longer on the Share", systemImage: "tv",
+                                   description: Text("This show's folder was removed or renamed."))
+        } else {
+            ShowPage(show: show)
+        }
+    }
+}
+
+private struct ShowPage: View {
+    @Bindable var show: Show
+    @Environment(PlaybackCenter.self) private var playback
+    /// Chosen when the page opens, then only by the user, so marking a
+    /// season watched doesn't jump the page to the next one.
+    @State private var season: Int?
+
+    var body: some View {
+        // Sorted once per update rather than once per use: a YouTube channel
+        // can have hundreds of episodes.
+        let all = show.sortedEpisodes
+        let next = Show.nextUp(in: all)
+        let seasons = Show.seasons(of: all)
+        let selectedSeason = season ?? Self.defaultSeason(next: next, seasons: seasons)
+        let episodes = all.filter { $0.season == selectedSeason }
+
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 BackdropHeader(ref: show.backdropRef ?? show.posterRef, fallbackRefs: show.fallbackRefs)
@@ -17,8 +38,8 @@ struct ShowDetailView: View {
                     Text(show.title).font(.title.bold())
                     HStack(spacing: 8) {
                         if let year = show.year { Text(String(year)) }
-                        Text("\(show.seasons.filter { $0 != 0 }.count) seasons")
-                        Text("\(show.episodes.count) episodes")
+                        Text("\(seasons.filter { $0 != 0 }.count) seasons")
+                        Text("\(all.count) episodes")
                     }
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -26,7 +47,7 @@ struct ShowDetailView: View {
                 .padding(.horizontal)
                 .padding(.top, -40)
 
-                if let next = show.nextUp {
+                if let next {
                     Button { playback.play(next) } label: {
                         VStack(spacing: 2) {
                             Label(next.isInProgress ? "Resume" : "Play", systemImage: "play.fill").font(.headline)
@@ -43,10 +64,10 @@ struct ShowDetailView: View {
                     Text(overview).font(.subheadline).lineLimit(5).padding(.horizontal)
                 }
 
-                if show.seasons.count > 1 {
+                if seasons.count > 1 {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack {
-                            ForEach(show.seasons, id: \.self) { s in
+                            ForEach(seasons, id: \.self) { s in
                                 Button(s == 0 ? "Specials" : "Season \(s)") { season = s }
                                     .buttonStyle(.bordered)
                                     .tint(s == selectedSeason ? .accentColor : .secondary)
@@ -67,6 +88,9 @@ struct ShowDetailView: View {
         }
         .ignoresSafeArea(edges: .top)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            if season == nil { season = selectedSeason }
+        }
         .toolbar {
             Menu {
                 Button {
@@ -79,6 +103,10 @@ struct ShowDetailView: View {
                 Image(systemName: "ellipsis.circle")
             }
         }
+    }
+
+    private static func defaultSeason(next: Video?, seasons: [Int]) -> Int {
+        next?.season ?? seasons.first ?? 1
     }
 }
 
