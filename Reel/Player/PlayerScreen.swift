@@ -41,9 +41,17 @@ struct PlayerScreen: View {
     @State private var index = 0
     @State private var showControls = true
     @State private var scrubPosition: Double?
+    @State private var isScrubbing = false
     @State private var hideTask: Task<Void, Never>?
     @State private var lastSaved = Date.distantPast
     @State private var started = false
+    @State private var locked = false
+    @State private var lockBadgeVisible = false
+    @State private var lockBadgeTask: Task<Void, Never>?
+    @State private var unlockProgress: Double = 0
+
+    /// How long the lock badge has to be held to unlock.
+    private static let unlockHold: Double = 1
 
     private var video: Video { session.queue[index] }
     private var nextVideo: Video? { session.queue.indices.contains(index + 1) ? session.queue[index + 1] : nil }
@@ -51,23 +59,48 @@ struct PlayerScreen: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            VideoSurface(view: controller.videoView).ignoresSafeArea()
+            // VLC's view would otherwise swallow taps, so the controls could
+            // never be brought back once hidden.
+            VideoSurface(view: controller.videoView).ignoresSafeArea().allowsHitTesting(false)
 
             if controller.isBuffering, controller.errorMessage == nil {
                 ProgressView().controlSize(.large).tint(.white)
             }
 
-            if showControls || controller.errorMessage != nil {
+            if locked {
+                if let error = controller.errorMessage { errorBox(error).foregroundStyle(.white) }
+                if lockBadgeVisible {
+                    lockBadge
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .padding(.top, 16)
+                        .transition(.opacity)
+                }
+            } else if showControls || controller.errorMessage != nil {
                 controls.transition(.opacity)
             }
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            withAnimation(.easeInOut(duration: 0.2)) { showControls.toggle() }
-            scheduleHide()
+            if locked {
+                revealLockBadge()
+            } else {
+                withAnimation(.easeInOut(duration: 0.2)) { showControls.toggle() }
+                scheduleHide()
+            }
         }
-        .statusBarHidden(!showControls)
+        // Swipe down to close, like the system player.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 40).onEnded { drag in
+                let t = drag.translation
+                if t.height > 120, t.height > abs(t.width) * 2, !isScrubbing, !locked { close() }
+            }
+        )
+        .statusBarHidden(locked || !showControls)
         .persistentSystemOverlays(.hidden)
+        // While locked, a swipe in from an edge (home, Control Center,
+        // notifications) needs a second swipe before the system acts on it.
+        .defersSystemGestures(on: locked ? .all : [])
+        .sensoryFeedback(.impact, trigger: locked)
         .preferredColorScheme(.dark)
         .onAppear {
             guard !started else { return }
@@ -87,6 +120,11 @@ struct PlayerScreen: View {
         .onReceive(controller.$currentTime) { _ in
             if Date().timeIntervalSince(lastSaved) > 10 { saveProgress() }
         }
+        // The first hide timer usually fires while the video is still
+        // buffering, so try again once it's actually playing.
+        .onChange(of: controller.isPlaying) { _, playing in
+            if playing, showControls { scheduleHide() }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { saveProgress() }
         }
@@ -105,13 +143,7 @@ struct PlayerScreen: View {
                 topBar
                 Spacer()
                 if let error = controller.errorMessage {
-                    VStack(spacing: 12) {
-                        Text(error).multilineTextAlignment(.center)
-                        Button("Try Again") { start(at: controller.currentTime) }
-                            .buttonStyle(.borderedProminent)
-                    }
-                    .padding()
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    errorBox(error)
                 } else {
                     transport
                 }
@@ -122,6 +154,17 @@ struct PlayerScreen: View {
             .padding(.vertical, 12)
         }
         .foregroundStyle(.white)
+    }
+
+    private func errorBox(_ message: String) -> some View {
+        VStack(spacing: 12) {
+            Text(message).multilineTextAlignment(.center)
+            Button("Try Again") { start(at: controller.currentTime) }
+                .buttonStyle(.borderedProminent)
+        }
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 24)
     }
 
     private var topBar: some View {
@@ -136,6 +179,10 @@ struct PlayerScreen: View {
                 }
             }
             Spacer()
+            Button { lock() } label: {
+                Image(systemName: "lock").font(.title2).frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Lock Screen")
             if controller.audioTracks.count > 1 {
                 Menu {
                     Picker("Audio", selection: Binding(get: { controller.currentAudio }, set: { controller.selectAudio($0) })) {
@@ -177,9 +224,13 @@ struct PlayerScreen: View {
     private var bottomBar: some View {
         VStack(spacing: 4) {
             Slider(
-                value: Binding(get: { scrubPosition ?? controller.currentTime }, set: { scrubPosition = $0 }),
+                value: Binding(get: { scrubPosition ?? controller.currentTime }, set: { if isScrubbing { scrubPosition = $0 } }),
                 in: 0...max(controller.duration, 1),
+                // Only the user's drag moves the thumb: the slider also writes
+                // back when it clamps (e.g. resuming before the length is known),
+                // which used to look like a scrub that never ended.
                 onEditingChanged: { editing in
+                    isScrubbing = editing
                     if !editing, let target = scrubPosition {
                         controller.seek(to: target)
                         scrubPosition = nil
@@ -202,6 +253,78 @@ struct PlayerScreen: View {
             }
             .font(.caption.monospacedDigit())
             .foregroundStyle(.white.opacity(0.85))
+        }
+    }
+
+    // MARK: Child lock
+
+    /// Only appears after a tap, and has to be held, so a toddler tapping or
+    /// mashing the screen doesn't unlock it.
+    private var lockBadge: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle().fill(.black.opacity(0.55))
+                Circle()
+                    .trim(from: 0, to: unlockProgress)
+                    .stroke(.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .padding(2)
+                Image(systemName: "lock.fill").font(.title2)
+            }
+            .frame(width: 64, height: 64)
+            .contentShape(Circle())
+            .onLongPressGesture(minimumDuration: Self.unlockHold, maximumDistance: 24) {
+                unlock()
+            } onPressingChanged: { pressing in
+                guard locked else { return }
+                if pressing {
+                    lockBadgeTask?.cancel()
+                    withAnimation(.linear(duration: Self.unlockHold)) { unlockProgress = 1 }
+                } else {
+                    withAnimation(.easeOut(duration: 0.2)) { unlockProgress = 0 }
+                    revealLockBadge()
+                }
+            }
+            .accessibilityLabel("Unlock")
+            .accessibilityAction { unlock() }
+
+            Text("Hold to unlock")
+                .font(.footnote.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(.black.opacity(0.55), in: Capsule())
+        }
+        .foregroundStyle(.white)
+    }
+
+    private func lock() {
+        hideTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.2)) {
+            locked = true
+            showControls = false
+        }
+        // Show where to unlock once, so it isn't a mystery later.
+        revealLockBadge()
+    }
+
+    private func unlock() {
+        lockBadgeTask?.cancel()
+        unlockProgress = 0
+        withAnimation(.easeInOut(duration: 0.2)) {
+            locked = false
+            lockBadgeVisible = false
+            showControls = true
+        }
+        scheduleHide()
+    }
+
+    private func revealLockBadge() {
+        withAnimation(.easeInOut(duration: 0.2)) { lockBadgeVisible = true }
+        lockBadgeTask?.cancel()
+        lockBadgeTask = Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.3)) { lockBadgeVisible = false }
         }
     }
 
@@ -237,9 +360,11 @@ struct PlayerScreen: View {
         video.setWatched(true)
         if nextVideo != nil {
             advance(to: index + 1, markWatched: false)
-        } else {
+        } else if !locked {
             close()
         }
+        // Locked, the player stays up at the end rather than dropping a
+        // child into the library. Unlocking brings the controls back.
     }
 
     private func advance(to newIndex: Int, markWatched: Bool) {
@@ -258,7 +383,7 @@ struct PlayerScreen: View {
         hideTask?.cancel()
         hideTask = Task {
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-            guard !Task.isCancelled, controller.isPlaying, scrubPosition == nil else { return }
+            guard !Task.isCancelled, controller.isPlaying, !isScrubbing else { return }
             withAnimation(.easeInOut(duration: 0.3)) { showControls = false }
         }
     }

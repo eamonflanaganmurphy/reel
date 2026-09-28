@@ -12,7 +12,12 @@ struct MediaTrack: Identifiable, Hashable {
 /// smb:// URL itself, so the router just serves bytes and nothing transcodes.
 final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate {
     let player = VLCMediaPlayer()
+    /// Goes in the SwiftUI hierarchy. VLC draws into `drawable` inside it.
     let videoView = UIView()
+    /// VLC adds a tap recognizer (for DVD menus) to its drawable's *superview*.
+    /// Handing it SwiftUI's view directly let that recognizer steal every tap,
+    /// so it gets a child of our own, touch-disabled container instead.
+    private let drawable = UIView()
 
     @Published private(set) var isPlaying = false
     @Published private(set) var isBuffering = true
@@ -33,7 +38,12 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
     override init() {
         super.init()
         videoView.backgroundColor = .black
-        player.drawable = videoView
+        videoView.isUserInteractionEnabled = false
+        drawable.frame = videoView.bounds
+        drawable.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        drawable.backgroundColor = .black
+        videoView.addSubview(drawable)
+        player.drawable = drawable
         player.delegate = self
     }
 
@@ -110,6 +120,8 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
                 self.duration = Double(length) / 1000
             }
             if self.isBuffering { self.isBuffering = false }
+            // VLC doesn't always report .playing after buffering.
+            if self.player.isPlaying, !self.isPlaying { self.isPlaying = true }
         }
     }
 
