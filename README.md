@@ -7,6 +7,8 @@ TMDB, and plays the files with VLC. Nothing is transcoded.
 
 - **Library:** Home (Continue Watching, Up Next, Recently Added), plus a poster grid per library
 - **Detail pages:** movie and show pages with seasons, episode stills and descriptions
+- **Thumbnails:** anything without a TMDB poster or episode still shows a frame from the video itself. Frames are
+  taken one at a time, wait while a scan or playback is running, and are cached, so each file is only read once.
 - **Playback:** resume and watch progress, autoplay of the next episode, audio and subtitle track choice. Sidecar `.srt` files from Bazarr are picked up automatically.
 - **Formats:** everything on Bucket_A plays: MKV/MP4/WebM/AVI, H.264/HEVC/AV1/Xvid, DTS/E-AC3/Opus, and SRT/ASS/PGS/DVD subtitles.
 

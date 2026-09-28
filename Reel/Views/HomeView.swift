@@ -75,7 +75,7 @@ struct HomeView: View {
             if !recent.isEmpty {
                 ShelfRow(title: "Recently Added · \(library.name)", items: recent) { movie in
                     NavigationLink(value: movie) {
-                        PosterCard(ref: movie.posterRef, title: movie.title, subtitle: movie.year.map(String.init),
+                        PosterCard(ref: movie.posterRef, fallbackRef: movie.frameRef, title: movie.title, subtitle: movie.year.map(String.init),
                                    progress: movie.isInProgress ? movie.progress : 0, watched: movie.watched)
                     }
                     .buttonStyle(.plain)
@@ -86,7 +86,7 @@ struct HomeView: View {
             if !recent.isEmpty {
                 ShelfRow(title: "Recently Updated · \(library.name)", items: recent) { show in
                     NavigationLink(value: show) {
-                        PosterCard(ref: show.posterRef, title: show.title,
+                        PosterCard(ref: show.posterRef, fallbackRef: show.frameRef, title: show.title,
                                    subtitle: "\(show.episodes.count) episodes", symbol: "tv")
                     }
                     .buttonStyle(.plain)

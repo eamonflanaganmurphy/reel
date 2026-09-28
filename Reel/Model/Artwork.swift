@@ -33,8 +33,9 @@ final class ServerConnection: @unchecked Sendable {
     }
 }
 
-/// Posters, backdrops and thumbnails, from TMDB or the share. Kept on disk in
-/// Caches so the library still looks right when the router is out of reach.
+/// Posters, backdrops and thumbnails, from TMDB, the share, or a frame of the
+/// video itself. Kept on disk in Caches so the library still looks right when
+/// the router is out of reach.
 actor ArtworkStore {
     static let shared = ArtworkStore()
 
@@ -64,7 +65,9 @@ actor ArtworkStore {
             return await image.byPreparingForDisplay() ?? image
         }
         inFlight[ref] = task
-        let image = await task.value
+        // Scrolling past stops the fetch, which for a video frame means VLC
+        // never opens the file.
+        let image = await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
         inFlight[ref] = nil
         if let image { memory.setObject(image, forKey: ref as NSString) }
         return image
@@ -77,6 +80,9 @@ actor ArtworkStore {
     }
 
     private static func fetch(_ ref: String, config: SMBConfig) async -> Data? {
+        if ref.hasPrefix("frame:") {
+            return await FrameGrabber.shared.jpeg(for: String(ref.dropFirst(6)), config: config)
+        }
         if ref.hasPrefix("smb:") {
             let path = String(ref.dropFirst(4))
             return try? await ServerConnection.shared.source(for: config).read(path, maxBytes: 5_000_000)
@@ -93,8 +99,11 @@ actor ArtworkStore {
 }
 
 /// An image from a posterRef/backdropRef, filling whatever frame it's given.
+/// `fallbackRef` is tried when `ref` is missing or won't load, normally a
+/// frame from the video.
 struct ArtworkImage: View {
     let ref: String?
+    var fallbackRef: String?
     var fallbackTitle: String?
     var fallbackSymbol = "film"
 
@@ -123,8 +132,13 @@ struct ArtworkImage: View {
                 }
             }
         }
-        .task(id: ref) {
-            let loaded = await ArtworkStore.shared.image(for: ref, config: settings.smbConfig)
+        .task(id: [ref, fallbackRef]) {
+            var loaded = await ArtworkStore.shared.image(for: ref, config: settings.smbConfig)
+            if loaded == nil, !Task.isCancelled {
+                loaded = await ArtworkStore.shared.image(for: fallbackRef, config: settings.smbConfig)
+            }
+            // A superseded load mustn't blank what its replacement shows.
+            guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.2)) { image = loaded }
         }
     }
@@ -134,6 +148,7 @@ struct ArtworkImage: View {
 /// overflows its frame in a grid.
 struct ArtworkFrame: View {
     let ref: String?
+    var fallbackRef: String?
     var aspectRatio: CGFloat = 2.0 / 3.0
     var fallbackTitle: String?
     var fallbackSymbol = "film"
@@ -142,7 +157,7 @@ struct ArtworkFrame: View {
     var body: some View {
         Color.clear
             .aspectRatio(aspectRatio, contentMode: .fit)
-            .overlay { ArtworkImage(ref: ref, fallbackTitle: fallbackTitle, fallbackSymbol: fallbackSymbol) }
+            .overlay { ArtworkImage(ref: ref, fallbackRef: fallbackRef, fallbackTitle: fallbackTitle, fallbackSymbol: fallbackSymbol) }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }

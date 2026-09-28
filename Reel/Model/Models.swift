@@ -50,6 +50,9 @@ final class Show {
         return eps.first ?? sortedEpisodes.first
     }
 
+    /// A frame from the first real episode, for when there's no poster.
+    var frameRef: String? { (sortedEpisodes.first { $0.season != 0 } ?? sortedEpisodes.first)?.frameRef }
+
     var hasStarted: Bool { episodes.contains { $0.watched || $0.isInProgress } }
     var lastPlayedAt: Date? { episodes.compactMap(\.lastPlayedAt).max() }
     var unwatchedCount: Int { episodes.filter { !$0.watched }.count }
@@ -107,6 +110,9 @@ final class Video {
     }
 
     var fileName: String { (path as NSString).lastPathComponent }
+
+    /// A frame from the file itself, for when there's no poster or still.
+    var frameRef: String { "frame:" + path }
 
     var isInProgress: Bool { !watched && positionSeconds > 30 }
 

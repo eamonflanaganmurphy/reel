@@ -22,6 +22,7 @@
 		A21EBBA46C0C52A3DF5B5FBA /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 117405A8481697097751510B /* RootView.swift */; };
 		AD75B0F6230C3DEDA2ABAD78 /* VLCKitSPM in Frameworks */ = {isa = PBXBuildFile; productRef = C33CB0A54E63ABCEF947CA10 /* VLCKitSPM */; };
 		B50FDBC8AA8DDB4F3C8D67DE /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5125BF7832A8883838DED6B /* Components.swift */; };
+		C9D8E418321949A3810036EF /* FrameGrabber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50745C55528A62B2E38FB897 /* FrameGrabber.swift */; };
 		CA63CFE07B7DCB9FEB61E5B3 /* PlayerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E1FF8E6B66FEAE5BA2CBF54 /* PlayerController.swift */; };
 		D1B818A2CAFC77E5C8229072 /* MovieDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175B90C50D1D44A981B175B7 /* MovieDetailView.swift */; };
 		DC8A159E0CFDA37EF08EF779 /* ServerBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F455BDF0C047F904BFE725E /* ServerBrowser.swift */; };
@@ -40,6 +41,7 @@
 		6C7F67623317E3959B0E334F /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		6D28B05F3E3322E261FDEEEB /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		79F565BAF7B28F9E3EC54A3F /* ReelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReelApp.swift; sourceTree = "<group>"; };
+		50745C55528A62B2E38FB897 /* FrameGrabber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameGrabber.swift; sourceTree = "<group>"; };
 		7E1FF8E6B66FEAE5BA2CBF54 /* PlayerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerController.swift; sourceTree = "<group>"; };
 		C7C4CAA7CFF687FF8B6724FD /* Reel.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Reel.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CEF0A3EA11E64E1138F3C33D /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
@@ -132,6 +134,7 @@
 		D69E52F4D3D0C331637E20AD /* Player */ = {
 			isa = PBXGroup;
 			children = (
+				50745C55528A62B2E38FB897 /* FrameGrabber.swift */,
 				7E1FF8E6B66FEAE5BA2CBF54 /* PlayerController.swift */,
 				FAFE47A2692ABE777C49988A /* PlayerScreen.swift */,
 			);
@@ -225,6 +228,7 @@
 				FFF5E72F8EDA28E354FF4668 /* LibraryView.swift in Sources */,
 				574A6DA0AAACDC66BA9C5373 /* Models.swift in Sources */,
 				D1B818A2CAFC77E5C8229072 /* MovieDetailView.swift in Sources */,
+				C9D8E418321949A3810036EF /* FrameGrabber.swift in Sources */,
 				CA63CFE07B7DCB9FEB61E5B3 /* PlayerController.swift in Sources */,
 				6AD5DFEB420F480A97C55E13 /* PlayerScreen.swift in Sources */,
 				7799BB781813431DEA4F182B /* ReelApp.swift in Sources */,

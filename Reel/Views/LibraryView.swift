@@ -35,7 +35,7 @@ struct LibraryView: View {
                 if library.kind == .movies {
                     ForEach(sortedMovies) { movie in
                         NavigationLink(value: movie) {
-                            PosterCard(ref: movie.posterRef, title: movie.title, subtitle: movie.year.map(String.init),
+                            PosterCard(ref: movie.posterRef, fallbackRef: movie.frameRef, title: movie.title, subtitle: movie.year.map(String.init),
                                        progress: movie.isInProgress ? movie.progress : 0, watched: movie.watched)
                         }
                         .buttonStyle(.plain)
@@ -43,7 +43,7 @@ struct LibraryView: View {
                 } else {
                     ForEach(sortedShows) { show in
                         NavigationLink(value: show) {
-                            PosterCard(ref: show.posterRef, title: show.title,
+                            PosterCard(ref: show.posterRef, fallbackRef: show.frameRef, title: show.title,
                                        subtitle: show.unwatchedCount > 0 ? "\(show.unwatchedCount) unwatched" : "Watched",
                                        symbol: "tv")
                         }

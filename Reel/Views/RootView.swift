@@ -39,5 +39,10 @@ struct RootView: View {
             if let last = sync.lastSync, Date().timeIntervalSince(last) < 15 * 60 { return }
             Task { await sync.run(settings: settings, context: context) }
         }
+        // Frames are read from the files, so they wait while a scan or a
+        // video is already reading from the router.
+        .onChange(of: sync.isRunning || playback.session != nil, initial: true) { _, busy in
+            FrameGrabber.shared.paused = busy
+        }
     }
 }
