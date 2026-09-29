@@ -10,7 +10,9 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    # Xcode 26 (iOS 26 SDK) is what gives the app the Liquid Glass look, like
+    # the floating tab bar; the iOS 18 SDK on macos-15 builds the old flat bar.
+    runs-on: macos-26
     timeout-minutes: 30
     permissions:
       contents: write
