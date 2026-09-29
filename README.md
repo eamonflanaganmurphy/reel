@@ -15,6 +15,8 @@ TMDB, and plays the files with VLC. Nothing is transcoded.
   A show tries an episode still, then frames from its first three episodes; an episode with no readable frame uses the
   show's backdrop. If nothing loads at all, a title card is generated, so every show and episode has a picture.
 - **Playback:** resume and watch progress, autoplay of the next episode, audio and subtitle track choice. Sidecar `.srt` files from Bazarr are picked up automatically.
+  The subtitles menu can also add a file to the playing video, from anywhere on the share or from the Files app;
+  it's kept on the phone and loads again whenever that video plays.
 - **Formats:** everything on Bucket_A plays: MKV/MP4/WebM/AVI, H.264/HEVC/AV1/Xvid, DTS/E-AC3/Opus, and SRT/ASS/PGS/DVD subtitles.
 
 ## Install on your iPhone (free Apple ID)

@@ -6,6 +6,8 @@ import VLCKitSPM
 struct MediaTrack: Identifiable, Hashable {
     let id: Int32
     let name: String
+
+    static let subtitlesOff = MediaTrack(id: -1, name: "Off")
 }
 
 /// Wraps VLCMediaPlayer and republishes what the controls need. VLC plays the
@@ -24,7 +26,7 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
     @Published private(set) var currentTime: Double = 0
     @Published private(set) var duration: Double = 0
     @Published private(set) var audioTracks: [MediaTrack] = []
-    @Published private(set) var subtitleTracks: [MediaTrack] = []
+    @Published private(set) var subtitleTracks: [MediaTrack] = [.subtitlesOff]
     @Published private(set) var currentAudio: Int32 = -1
     @Published private(set) var currentSubtitle: Int32 = -1
     @Published private(set) var errorMessage: String?
@@ -32,7 +34,21 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
     /// Called on the main thread when playback reaches the end.
     var onEnded: (() -> Void)?
 
-    private var pendingSubtitles: [URL] = []
+    /// A subtitle file on this phone, waiting to be handed to VLC.
+    struct Sidecar {
+        let url: URL
+        /// Shown in the menu. VLC only calls a sidecar "Track 3".
+        let label: String
+        /// Switch to it once attached, for one the user just added.
+        var select = false
+    }
+
+    private var pendingSubtitles: [Sidecar] = []
+    /// Labels of sidecars handed to VLC whose tracks haven't appeared yet.
+    /// VLC opens them in order, so they're matched to new track ids in order.
+    private var unmatchedLabels: [String] = []
+    private var subtitleLabels: [Int32: String] = [:]
+    private var seenSubtitleIDs: Set<Int32> = []
     private var hasStarted = false
 
     override init() {
@@ -59,6 +75,12 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
         media.addOption(":network-caching=3000")
         if seconds > 1 { media.addOption(":start-time=\(Int(seconds))") }
         pendingSubtitles = []
+        unmatchedLabels = []
+        subtitleLabels = [:]
+        seenSubtitleIDs = []
+        subtitleTracks = [.subtitlesOff]
+        audioTracks = []
+        currentSubtitle = -1
         hasStarted = false
         errorMessage = nil
         currentTime = seconds
@@ -70,17 +92,36 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
 
     /// Sidecar subtitles, downloaded to local files. Safe to call before the
     /// file has opened; they attach once it has.
-    func addSubtitles(_ urls: [URL]) {
+    func addSubtitles(_ sidecars: [Sidecar]) {
         if hasStarted {
-            for url in urls { _ = player.addPlaybackSlave(url, type: .subtitle, enforce: false) }
+            attach(sidecars)
         } else {
-            pendingSubtitles += urls
+            pendingSubtitles += sidecars
+        }
+    }
+
+    private func attach(_ sidecars: [Sidecar]) {
+        guard !sidecars.isEmpty else { return }
+        // Know which tracks were there before, so the new ones get the labels.
+        refreshTracks()
+        for s in sidecars {
+            if player.addPlaybackSlave(s.url, type: .subtitle, enforce: s.select) == 0 {
+                unmatchedLabels.append(s.label)
+            }
+        }
+        // VLC opens slaves on its own thread and doesn't say when a track
+        // is selected, only when one is added.
+        for delay in [0.5, 1.5] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.refreshTracks() }
         }
     }
 
     func togglePlay() {
         if player.isPlaying { player.pause() } else { player.play() }
     }
+
+    func pause() { player.pause() }
+    func play() { player.play() }
 
     func skip(_ seconds: Int32) {
         if seconds > 0 { player.jumpForward(seconds) } else { player.jumpBackward(-seconds) }
@@ -135,10 +176,9 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
             if !hasStarted {
                 hasStarted = true
                 // Slaves only attach once the input is open.
-                for url in pendingSubtitles {
-                    _ = player.addPlaybackSlave(url, type: .subtitle, enforce: false)
-                }
+                let pending = pendingSubtitles
                 pendingSubtitles = []
+                attach(pending)
             }
             refreshTracks()
         case .paused:
@@ -180,9 +220,19 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
 
     private func refreshTracks() {
         audioTracks = Self.tracks(names: player.audioTrackNames, indexes: player.audioTrackIndexes)
-        subtitleTracks = Self.tracks(names: player.videoSubTitlesNames, indexes: player.videoSubTitlesIndexes)
         currentAudio = player.currentAudioTrackIndex
         currentSubtitle = player.currentVideoSubTitleIndex
+
+        let subs = Self.tracks(names: player.videoSubTitlesNames, indexes: player.videoSubTitlesIndexes)
+            .filter { $0.id >= 0 }
+        for id in subs.map(\.id).filter({ !seenSubtitleIDs.contains($0) }).sorted() {
+            seenSubtitleIDs.insert(id)
+            if !unmatchedLabels.isEmpty { subtitleLabels[id] = unmatchedLabels.removeFirst() }
+        }
+        // VLC's own "Disable" entry only exists once there's a track, so
+        // "Off" is always added here instead.
+        subtitleTracks = [.subtitlesOff]
+            + subs.map { MediaTrack(id: $0.id, name: subtitleLabels[$0.id] ?? $0.name) }
     }
 
     private static func tracks(names: [Any], indexes: [Any]) -> [MediaTrack] {

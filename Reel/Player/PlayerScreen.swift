@@ -1,5 +1,7 @@
+import ReelCore
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// What's playing: the video plus the rest of its season, for autoplay.
 @Observable
@@ -49,6 +51,12 @@ struct PlayerScreen: View {
     @State private var lockBadgeVisible = false
     @State private var lockBadgeTask: Task<Void, Never>?
     @State private var unlockProgress: Double = 0
+    @State private var pickingShareSubtitle = false
+    @State private var pickingFilesSubtitle = false
+    /// Playback pauses while a subtitle is being picked, and carries on after.
+    @State private var resumeAfterPicking = false
+    @State private var addedSubtitleCount = 0
+    @State private var subtitleError: String?
 
     /// How long the lock badge has to be held to unlock.
     private static let unlockHold: Double = 1
@@ -128,6 +136,19 @@ struct PlayerScreen: View {
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { saveProgress() }
         }
+        .sheet(isPresented: $pickingShareSubtitle, onDismiss: resumeAfterPicker) {
+            ShareSubtitlePicker(videoPath: video.path) { addFromShare($0) }
+        }
+        .fileImporter(isPresented: $pickingFilesSubtitle, allowedContentTypes: [.data]) { addFromFiles($0) }
+        // Not every way of closing the Files picker calls its completion.
+        .onChange(of: pickingFilesSubtitle) { _, picking in
+            if !picking { resumeAfterPicker() }
+        }
+        .alert("Couldn't Add Subtitles", isPresented: Binding(get: { subtitleError != nil }, set: { if !$0 { subtitleError = nil } })) {
+            Button("OK") { subtitleError = nil }
+        } message: {
+            Text(subtitleError ?? "")
+        }
     }
 
     // MARK: Controls
@@ -192,16 +213,28 @@ struct PlayerScreen: View {
                     Image(systemName: "waveform.circle").font(.title2).frame(width: 44, height: 44)
                 }
             }
-            if !controller.subtitleTracks.isEmpty {
-                Menu {
-                    Picker("Subtitles", selection: Binding(get: { controller.currentSubtitle }, set: { controller.selectSubtitle($0) })) {
-                        ForEach(controller.subtitleTracks) { Text($0.name).tag($0.id) }
-                    }
-                } label: {
-                    Image(systemName: controller.currentSubtitle >= 0 ? "captions.bubble.fill" : "captions.bubble")
-                        .font(.title2).frame(width: 44, height: 44)
+            Menu {
+                Picker("Subtitles", selection: Binding(get: { controller.currentSubtitle }, set: { controller.selectSubtitle($0) })) {
+                    ForEach(controller.subtitleTracks) { Text($0.name).tag($0.id) }
                 }
+                Section {
+                    Button { startPicking { pickingShareSubtitle = true } } label: {
+                        Label("Add from Share…", systemImage: "externaldrive.connected.to.line.below")
+                    }
+                    Button { startPicking { pickingFilesSubtitle = true } } label: {
+                        Label("Add from Files…", systemImage: "folder")
+                    }
+                    if addedSubtitleCount > 0 {
+                        Button(role: .destructive) { removeAddedSubtitles() } label: {
+                            Label("Remove Added Subtitles", systemImage: "trash")
+                        }
+                    }
+                }
+            } label: {
+                Image(systemName: controller.currentSubtitle >= 0 ? "captions.bubble.fill" : "captions.bubble")
+                    .font(.title2).frame(width: 44, height: 44)
             }
+            .accessibilityLabel("Subtitles")
         }
     }
 
@@ -337,17 +370,83 @@ struct PlayerScreen: View {
         scheduleHide()
 
         let current = index
+        let videoPath = video.path
+        let added = AddedSubtitles.files(for: videoPath)
+        addedSubtitleCount = added.count
         let subtitles = video.subtitles
         let config = settings.smbConfig
-        guard !subtitles.isEmpty else { return }
+        guard !subtitles.isEmpty || !added.isEmpty else { return }
         Task {
-            var local: [URL] = []
+            var local: [PlayerController.Sidecar] = []
             for s in subtitles {
-                if let url = try? await ServerConnection.shared.download(s.path, config: config) { local.append(url) }
+                if let url = try? await ServerConnection.shared.download(s.path, config: config) {
+                    local.append(.init(url: url, label: s.label))
+                }
             }
+            local += added.map { .init(url: $0, label: AddedSubtitles.label(for: $0, videoPath: videoPath)) }
             // The user may have skipped ahead while these downloaded.
             if current == index { controller.addSubtitles(local) }
         }
+    }
+
+    // MARK: Adding subtitles
+
+    private func startPicking(_ present: () -> Void) {
+        resumeAfterPicking = controller.isPlaying
+        if resumeAfterPicking { controller.pause() }
+        hideTask?.cancel()
+        present()
+    }
+
+    private func resumeAfterPicker() {
+        guard !pickingShareSubtitle, !pickingFilesSubtitle, resumeAfterPicking else { return }
+        resumeAfterPicking = false
+        controller.play()
+        scheduleHide()
+    }
+
+    private func addFromShare(_ entry: FileEntry) {
+        let current = index
+        let videoPath = video.path
+        let config = settings.smbConfig
+        Task {
+            do {
+                let download = try await ServerConnection.shared.download(entry.path, config: config)
+                attachAdded(try AddedSubtitles.add(download, for: videoPath), videoPath: videoPath, index: current)
+            } catch {
+                subtitleError = "\(entry.name) couldn't be copied from the share. \(LibrarySync.describe(error))"
+            }
+        }
+    }
+
+    private func addFromFiles(_ result: Result<URL, Error>) {
+        guard case .success(let url) = result else { return }
+        guard AddedSubtitles.isSubtitle(url.lastPathComponent) else {
+            subtitleError = "\(url.lastPathComponent) isn't a subtitle file. Reel can add SRT, ASS, SSA and WebVTT files."
+            return
+        }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            attachAdded(try AddedSubtitles.add(url, for: video.path), videoPath: video.path, index: index)
+        } catch {
+            subtitleError = "\(url.lastPathComponent) couldn't be copied. \(error.localizedDescription)"
+        }
+    }
+
+    /// Saved for next time, and switched on now if the same video is still playing.
+    private func attachAdded(_ file: URL, videoPath: String, index added: Int) {
+        guard added == index else { return }
+        addedSubtitleCount = AddedSubtitles.files(for: videoPath).count
+        controller.addSubtitles([.init(url: file, label: AddedSubtitles.label(for: file, videoPath: videoPath), select: true)])
+    }
+
+    /// VLC can't drop a track from a file that's open, so they're turned off
+    /// now and are gone the next time the video plays.
+    private func removeAddedSubtitles() {
+        AddedSubtitles.removeAll(for: video.path)
+        addedSubtitleCount = 0
+        controller.selectSubtitle(-1)
     }
 
     private func saveProgress() {
