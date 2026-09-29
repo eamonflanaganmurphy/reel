@@ -86,6 +86,10 @@ struct PlayerScreen: View {
             } else if showControls || controller.errorMessage != nil {
                 controls.transition(.opacity)
             }
+
+            if !locked, !pickingShareSubtitle, !pickingFilesSubtitle {
+                keyboardShortcuts
+            }
         }
         .contentShape(Rectangle())
         .onTapGesture {
@@ -287,6 +291,25 @@ struct PlayerScreen: View {
             .font(.caption.monospacedDigit())
             .foregroundStyle(.white.opacity(0.85))
         }
+    }
+
+    /// For an iPad keyboard: space plays and pauses, the arrows skip, Escape
+    /// closes. Shortcuts belong to buttons, so these are buttons nobody sees.
+    private var keyboardShortcuts: some View {
+        ZStack {
+            Button("Play or Pause") { controller.togglePlay() }
+                .keyboardShortcut(.space, modifiers: [])
+            Button("Back 10 Seconds") { controller.skip(-10) }
+                .keyboardShortcut(.leftArrow, modifiers: [])
+            Button("Forward 30 Seconds") { controller.skip(30) }
+                .keyboardShortcut(.rightArrow, modifiers: [])
+            Button("Close") { close() }
+                .keyboardShortcut(.cancelAction)
+        }
+        .frame(width: 0, height: 0)
+        .clipped()
+        .opacity(0)
+        .accessibilityHidden(true)
     }
 
     // MARK: Child lock
@@ -501,9 +524,13 @@ private struct VideoSurface: UIViewRepresentable {
     func updateUIView(_ uiView: UIView, context: Context) {}
 }
 
+/// Turns the phone for the player and back. An iPad is left as it's held:
+/// the video letterboxes, and a window in Split View or Stage Manager can't
+/// rotate on its own anyway.
 enum Orientation {
     static func request(_ mask: UIInterfaceOrientationMask) {
-        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
+        guard UIDevice.current.userInterfaceIdiom == .phone,
+              let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { _ in }
         scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
     }

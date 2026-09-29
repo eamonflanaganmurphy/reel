@@ -16,15 +16,18 @@ struct MovieDetailView: View {
 
 private struct MoviePage: View {
     @Bindable var video: Video
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
+        let layout = Sizing(sizeClass)
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                BackdropHeader(ref: video.backdropRef ?? video.posterRef, fallbackRefs: [video.frameRef])
+                BackdropHeader(ref: video.backdropRef ?? video.posterRef, fallbackRefs: [video.frameRef],
+                               aspectRatio: layout.backdropAspect)
 
                 HStack(alignment: .bottom, spacing: 16) {
                     ArtworkFrame(ref: video.posterRef, fallbackRefs: [video.frameRef], fallbackTitle: video.title)
-                        .frame(width: 110)
+                        .frame(width: layout.detailPosterWidth)
                         .shadow(radius: 8)
                     VStack(alignment: .leading, spacing: 6) {
                         Text(video.displayTitle).font(.title2.bold())
@@ -41,13 +44,18 @@ private struct MoviePage: View {
                 .padding(.top, -60)
 
                 PlayButtons(video: video)
+                    .frame(maxWidth: layout.buttonsWidth)
                     .padding(.horizontal)
 
                 if let overview = video.overview, !overview.isEmpty {
-                    Text(overview).font(.body).padding(.horizontal)
+                    Text(overview).font(.body)
+                        .frame(maxWidth: layout.readableWidth, alignment: .leading)
+                        .padding(.horizontal)
                 }
 
-                FileInfo(video: video).padding(.horizontal)
+                FileInfo(video: video)
+                    .frame(maxWidth: layout.readableWidth, alignment: .leading)
+                    .padding(.horizontal)
             }
             .padding(.bottom, 24)
         }

@@ -122,6 +122,9 @@ public struct TMDBClient: Sendable {
         c.queryItems = items.sorted { $0.name < $1.name }
 
         var request = URLRequest(url: c.url!)
+        // With no internet (the router's own WiFi, on a plane) its DNS can
+        // take a long time to give up; better to find out quickly.
+        request.timeoutInterval = 15
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if usesBearerToken { request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization") }
 

@@ -183,7 +183,7 @@ struct SettingsView: View {
                 }
                 .disabled(!settings.isConfigured || sync.isRunning || settings.tmdbKey.isEmpty)
 
-                Button("Clear Artwork Cache") {
+                Button("Clear Saved Artwork") {
                     Task { await ArtworkStore.shared.clear() }
                 }
             } footer: {

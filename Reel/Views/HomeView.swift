@@ -8,6 +8,7 @@ struct HomeView: View {
     @Environment(LibrarySync.self) private var sync
     @Environment(PlaybackCenter.self) private var playback
     @Environment(\.modelContext) private var context
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     @Query(filter: #Predicate<Video> { $0.positionSeconds > 30 && !$0.watched },
            sort: \Video.lastPlayedAt, order: .reverse)
@@ -19,13 +20,15 @@ struct HomeView: View {
     @Query(sort: \Show.updatedAt, order: .reverse)
     private var shows: [Show]
 
+    private var layout: Sizing { Sizing(sizeClass) }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 statusBanner
 
                 if !inProgress.isEmpty {
-                    ShelfRow(title: "Keep Watching", items: inProgress, cardWidth: 240) { video in
+                    ShelfRow(title: "Keep Watching", items: inProgress, cardWidth: layout.wideCardWidth) { video in
                         Button { playback.play(video) } label: { WideCard(video: video) }
                             .buttonStyle(.plain)
                             .contextMenu { keepWatchingMenu(video) }
@@ -54,7 +57,7 @@ struct HomeView: View {
         case .movies:
             let recent = Array(movies.filter { $0.libraryID == library.id }.prefix(20))
             if !recent.isEmpty {
-                ShelfRow(title: "Recently Added · \(library.name)", items: recent) { movie in
+                ShelfRow(title: "Recently Added · \(library.name)", items: recent, cardWidth: layout.posterWidth) { movie in
                     NavigationLink(value: movie) {
                         PosterCard(ref: movie.posterRef, fallbackRefs: [movie.frameRef], title: movie.title, subtitle: movie.year.map(String.init),
                                    progress: movie.isInProgress ? movie.progress : 0, watched: movie.watched)
@@ -65,7 +68,7 @@ struct HomeView: View {
         case .shows:
             let recent = Array(shows.filter { $0.libraryID == library.id }.prefix(20))
             if !recent.isEmpty {
-                ShelfRow(title: "Recently Updated · \(library.name)", items: recent) { show in
+                ShelfRow(title: "Recently Updated · \(library.name)", items: recent, cardWidth: layout.posterWidth) { show in
                     NavigationLink(value: show) {
                         PosterCard(ref: show.posterRef, fallbackRefs: show.fallbackRefs, title: show.title,
                                    subtitle: "\(show.episodes.count) episodes", symbol: "tv")

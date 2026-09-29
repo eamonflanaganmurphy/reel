@@ -59,7 +59,16 @@ final class LibrarySync {
 
             let key = settings.tmdbKey.trimmingCharacters(in: .whitespaces)
             if !key.isEmpty {
-                try await fetchMetadata(client: TMDBClient(apiKey: key), settings: settings, context: context)
+                do {
+                    try await fetchMetadata(client: TMDBClient(apiKey: key), settings: settings, context: context)
+                    await saveArtwork(context: context)
+                } catch let error as URLError where ArtworkStore.isOffline(error) {
+                    // No internet, e.g. on the router's own WiFi on a plane.
+                    // The share scanned fine, so this still counts as a sync
+                    // (or every return to the app would rescan the router);
+                    // what's left is looked up next time there's a connection.
+                    try? context.save()
+                }
             }
 
             lastSync = .now
@@ -241,6 +250,44 @@ final class LibrarySync {
                 }
             }
             try context.save()
+        }
+    }
+
+    /// TMDB artwork is fetched while there's internet, so the library looks
+    /// complete without it. Otherwise anything not yet scrolled past falls
+    /// back to frames read from the videos on the router, which then competes
+    /// with whoever is watching. A first run is ~1,700 images, ~100 MB.
+    private func saveArtwork(context: ModelContext) async {
+        var refs = Set<String>()
+        for video in (try? context.fetch(FetchDescriptor<Video>())) ?? [] {
+            refs.formUnion([video.posterRef, video.backdropRef].compactMap { $0 })
+        }
+        for show in (try? context.fetch(FetchDescriptor<Show>())) ?? [] {
+            refs.formUnion([show.posterRef, show.backdropRef].compactMap { $0 })
+        }
+        let store = ArtworkStore.shared
+        var queue = refs.filter { $0.hasPrefix("https:") && !store.isSaved($0) }.sorted()[...]
+        let total = queue.count
+        guard total > 0 else { return }
+
+        var done = 0
+        var offline = false
+        await withTaskGroup(of: ArtworkStore.SaveResult.self) { group in
+            var running = 0
+            while true {
+                while running < 4, !offline, let ref = queue.popFirst() {
+                    group.addTask { await store.save(ref) }
+                    running += 1
+                }
+                guard running > 0, let result = await group.next() else { break }
+                running -= 1
+                done += 1
+                // Lost the internet partway: the rest can wait for next time.
+                if result == .offline { offline = true }
+                if done % 10 == 0 || done == total {
+                    state = .scanning("Saving artwork for offline use, \(done) of \(total)…")
+                }
+            }
         }
     }
 

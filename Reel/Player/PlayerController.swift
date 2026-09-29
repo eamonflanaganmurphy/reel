@@ -1,3 +1,4 @@
+import AVFoundation
 import Combine
 import Foundation
 import UIKit
@@ -61,6 +62,31 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
         videoView.addSubview(drawable)
         player.drawable = drawable
         player.delegate = self
+        let center = NotificationCenter.default
+        center.addObserver(self, selector: #selector(audioRouteChanged(_:)),
+                           name: AVAudioSession.routeChangeNotification, object: nil)
+        center.addObserver(self, selector: #selector(audioInterrupted(_:)),
+                           name: AVAudioSession.interruptionNotification, object: nil)
+    }
+
+    /// Headphones unplugged, out of Bluetooth range or taken out of the
+    /// ears: pause, as every iOS player does, rather than carry on out of the
+    /// speaker (on a plane, say).
+    @objc private func audioRouteChanged(_ notification: Notification) {
+        guard let raw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              AVAudioSession.RouteChangeReason(rawValue: raw) == .oldDeviceUnavailable else { return }
+        DispatchQueue.main.async { [weak self] in self?.pauseIfPlaying() }
+    }
+
+    /// A call or an alarm took the audio. Playback waits for the user after.
+    @objc private func audioInterrupted(_ notification: Notification) {
+        guard let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+              AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }
+        DispatchQueue.main.async { [weak self] in self?.pauseIfPlaying() }
+    }
+
+    private func pauseIfPlaying() {
+        if player.isPlaying { player.pause() }
     }
 
     deinit {

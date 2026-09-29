@@ -8,6 +8,7 @@ struct LibraryView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(LibrarySync.self) private var sync
     @Environment(\.modelContext) private var context
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     @Query private var movies: [Video]
     @Query private var shows: [Show]
@@ -27,11 +28,9 @@ struct LibraryView: View {
         _shows = Query(filter: #Predicate<Show> { $0.libraryID == id }, sort: \Show.title)
     }
 
-    private let columns = [GridItem(.adaptive(minimum: 104, maximum: 160), spacing: 14, alignment: .top)]
-
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 18) {
+            LazyVGrid(columns: Sizing(sizeClass).gridColumns, spacing: 18) {
                 if library.kind == .movies {
                     ForEach(sortedMovies) { movie in
                         NavigationLink(value: movie) {

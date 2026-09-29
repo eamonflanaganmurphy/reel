@@ -40,8 +40,10 @@ final class ServerConnection: @unchecked Sendable {
 }
 
 /// Posters, backdrops and thumbnails, from TMDB, the share, or a frame of the
-/// video itself. Kept on disk in Caches so the library still looks right when
-/// the router is out of reach.
+/// video itself. Kept on disk so the library still looks right when the
+/// router is out of reach, and with no internet (on the router's own WiFi on
+/// a plane). That's Application Support rather than Caches, which iOS
+/// empties when storage runs low, often just before a trip.
 actor ArtworkStore {
     static let shared = ArtworkStore()
 
@@ -62,9 +64,16 @@ actor ArtworkStore {
     private static let maxPixels: CGFloat = 1280
 
     init() {
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        directory = caches.appendingPathComponent("artwork", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let files = FileManager.default
+        let support = files.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        directory = support.appendingPathComponent("Artwork", isDirectory: true)
+        // Builds before this kept it in Caches.
+        let old = files.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("artwork", isDirectory: true)
+        if !files.fileExists(atPath: directory.path), files.fileExists(atPath: old.path) {
+            try? files.createDirectory(at: support, withIntermediateDirectories: true)
+            try? files.moveItem(at: old, to: directory)
+        }
+        Self.makeDirectory(directory)
         memory.countLimit = 300
         // Decoded bitmaps, not files: a 1280x720 backdrop is ~3.7 MB.
         memory.totalCostLimit = 150_000_000
@@ -135,7 +144,51 @@ actor ArtworkStore {
     func clear() {
         memory.removeAllObjects()
         try? FileManager.default.removeItem(at: directory)
+        Self.makeDirectory(directory)
+    }
+
+    /// Everything here can be fetched again, so it stays out of iCloud backups.
+    private static func makeDirectory(_ directory: URL) {
+        var directory = directory
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? directory.setResourceValues(values)
+    }
+
+    // MARK: Saving ahead
+
+    enum SaveResult { case saved, failed, offline }
+
+    nonisolated func isSaved(_ ref: String) -> Bool {
+        FileManager.default.fileExists(atPath: directory.appendingPathComponent(Self.fileName(for: ref)).path)
+    }
+
+    /// Downloads an image from the web to disk, without decoding it, so it's
+    /// there with no internet later. See `LibrarySync.saveArtwork`.
+    nonisolated func save(_ ref: String) async -> SaveResult {
+        guard let url = URL(string: ref) else { return .failed }
+        do {
+            let (data, response) = try await URLSession.shared.data(for: Self.request(url))
+            guard (response as? HTTPURLResponse)?.statusCode == 200, !data.isEmpty else { return .failed }
+            try data.write(to: directory.appendingPathComponent(Self.fileName(for: ref)), options: .atomic)
+            return .saved
+        } catch let error as URLError where Self.isOffline(error) {
+            return .offline
+        } catch {
+            return .failed
+        }
+    }
+
+    nonisolated static func isOffline(_ error: URLError) -> Bool {
+        [.notConnectedToInternet, .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .timedOut,
+         .networkConnectionLost, .dataNotAllowed, .internationalRoamingOff].contains(error.code)
+    }
+
+    /// With no internet, the router's DNS can take a long time to give up,
+    /// so a fetch shouldn't wait out URLSession's default minute.
+    private static func request(_ url: URL) -> URLRequest {
+        URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 15)
     }
 
     private static func fetch(_ ref: String, config: SMBConfig) async -> Data? {
@@ -147,7 +200,7 @@ actor ArtworkStore {
             return try? await ServerConnection.shared.source(for: config).read(path, maxBytes: 5_000_000)
         }
         guard let url = URL(string: ref) else { return nil }
-        guard let (data, response) = try? await URLSession.shared.data(from: url),
+        guard let (data, response) = try? await URLSession.shared.data(for: request(url)),
               (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
         return data
     }

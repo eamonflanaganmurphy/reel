@@ -1,6 +1,6 @@
 # Reel
 
-An iPhone player for the movies and TV on the Nomad router's SMB
+An iPhone and iPad player for the movies and TV on the Nomad router's SMB
 share (a mirror of Bucket_A). It connects straight to the share, so there's no
 server software involved: the app lists the folders itself, looks titles up on
 TMDB, and plays the files with VLC. Nothing is transcoded.
@@ -17,6 +17,11 @@ TMDB, and plays the files with VLC. Nothing is transcoded.
 - **Playback:** resume and watch progress, autoplay of the next episode, audio and subtitle track choice. Sidecar `.srt` files from Bazarr are picked up automatically.
   The subtitles menu can also add a file to the playing video, from anywhere on the share or from the Files app;
   it's kept on the phone and loads again whenever that video plays.
+- **iPad:** bigger posters, episodes side by side, and any orientation, Split View or Stage Manager. The player
+  doesn't force landscape there, and a keyboard works: space plays and pauses, ← and → skip, Esc closes.
+- **Offline:** artwork from TMDB is saved on the device during scans, so the library looks the same with no
+  internet, e.g. on the router's own WiFi on a plane. A scan with no internet still counts; TMDB lookups wait until
+  there's a connection. Playback pauses if the headphones disconnect.
 - **Formats:** everything on Bucket_A plays: MKV/MP4/WebM/AVI, H.264/HEVC/AV1/Xvid, DTS/E-AC3/Opus, and SRT/ASS/PGS/DVD subtitles.
 
 ## Install on your iPhone (free Apple ID)
@@ -68,6 +73,14 @@ Open the Settings tab:
 Then **Scan Now**. The first scan with TMDB takes a minute or so; after that only new files are looked up.
 The app rescans on its own when opened, at most every 15 minutes, and you can pull down on any screen to
 rescan.
+
+## On a plane (the router's own WiFi)
+
+- Set **Address** to `192.168.8.1`, the router's LAN address, not its Tailscale one: over Tailscale the router
+  encrypts every byte of video, which its CPU can't keep up with.
+- Open Reel with internet first and let a scan finish, so the artwork is saved for offline.
+- Join the router's **5 GHz** network if you have the choice. The library tops out at 15 Mbit/s, so two streams need
+  about 30 Mbit/s at most.
 
 ## Checking the share from the Mac
 

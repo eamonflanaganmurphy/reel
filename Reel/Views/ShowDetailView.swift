@@ -17,6 +17,7 @@ struct ShowDetailView: View {
 private struct ShowPage: View {
     @Bindable var show: Show
     @Environment(PlaybackCenter.self) private var playback
+    @Environment(\.horizontalSizeClass) private var sizeClass
     /// Chosen when the page opens, then only by the user, so marking a
     /// season watched doesn't jump the page to the next one.
     @State private var season: Int?
@@ -29,10 +30,12 @@ private struct ShowPage: View {
         let seasons = Show.seasons(of: all)
         let selectedSeason = season ?? Self.defaultSeason(next: next, seasons: seasons)
         let episodes = all.filter { $0.season == selectedSeason }
+        let layout = Sizing(sizeClass)
 
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                BackdropHeader(ref: show.backdropRef ?? show.posterRef, fallbackRefs: show.fallbackRefs)
+                BackdropHeader(ref: show.backdropRef ?? show.posterRef, fallbackRefs: show.fallbackRefs,
+                               aspectRatio: layout.backdropAspect)
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(show.title).font(.title.bold())
@@ -57,11 +60,14 @@ private struct ShowPage: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
+                    .frame(maxWidth: layout.buttonsWidth)
                     .padding(.horizontal)
                 }
 
                 if let overview = show.overview, !overview.isEmpty {
-                    Text(overview).font(.subheadline).lineLimit(5).padding(.horizontal)
+                    Text(overview).font(.subheadline).lineLimit(5)
+                        .frame(maxWidth: layout.readableWidth, alignment: .leading)
+                        .padding(.horizontal)
                 }
 
                 if seasons.count > 1 {
@@ -77,9 +83,9 @@ private struct ShowPage: View {
                     }
                 }
 
-                LazyVStack(spacing: 14) {
+                LazyVGrid(columns: layout.episodeColumns, spacing: 14) {
                     ForEach(episodes) { episode in
-                        EpisodeRow(episode: episode)
+                        EpisodeRow(episode: episode, thumbWidth: layout.episodeThumbWidth)
                     }
                 }
                 .padding(.horizontal)
@@ -112,6 +118,7 @@ private struct ShowPage: View {
 
 struct EpisodeRow: View {
     @Bindable var episode: Video
+    var thumbWidth: CGFloat = 150
     @Environment(PlaybackCenter.self) private var playback
     @State private var expanded = false
 
@@ -123,7 +130,7 @@ struct EpisodeRow: View {
                 ArtworkFrame(ref: episode.posterRef, fallbackRefs: [episode.frameRef, episode.show?.backdropRef],
                              aspectRatio: 16.0 / 9.0, fallbackTitle: episode.show?.title, fallbackSubtitle: episode.episodeCode,
                              fallbackSymbol: "play.rectangle", cornerRadius: 6)
-                    .frame(width: 150)
+                    .frame(width: thumbWidth)
                     .overlay(alignment: .bottom) {
                         if episode.isInProgress { ProgressBar(value: episode.progress).padding(5) }
                     }
