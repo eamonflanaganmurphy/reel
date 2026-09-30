@@ -125,14 +125,14 @@ private struct SubtitleFolderList: View {
                 ProgressView()
             }
         }
-        .navigationTitle(path.isEmpty ? settings.smbConfig.share : (path as NSString).lastPathComponent)
+        .navigationTitle(path.isEmpty ? settings.shareConfig.displayName : (path as NSString).lastPathComponent)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: onCancel) }
         }
         .task {
             do {
-                let entries = try await ServerConnection.shared.source(for: settings.smbConfig).list(path)
+                let entries = try await ServerConnection.shared.source(for: settings.shareConfig).list(path)
                     .filter { !$0.name.hasPrefix(".") }
                     .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
                 subtitles = entries.filter { !$0.isDirectory && AddedSubtitles.isSubtitle($0.name) }

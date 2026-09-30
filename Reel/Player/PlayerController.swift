@@ -12,7 +12,7 @@ struct MediaTrack: Identifiable, Hashable {
 }
 
 /// Wraps VLCMediaPlayer and republishes what the controls need. VLC plays the
-/// smb:// URL itself, so the router just serves bytes and nothing transcodes.
+/// smb:// or http(s):// URL itself, so the router just serves bytes and nothing transcodes.
 final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate {
     let player = VLCMediaPlayer()
     /// Goes in the SwiftUI hierarchy. VLC draws into `drawable` inside it.

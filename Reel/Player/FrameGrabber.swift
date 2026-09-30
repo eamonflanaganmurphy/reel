@@ -4,7 +4,7 @@ import UIKit
 import VLCKitSPM
 
 /// Stills taken from the video files themselves, for anything TMDB and the
-/// share have no poster or episode image for. VLC opens the file over SMB,
+/// share have no poster or episode image for. VLC opens the file over SMB or WebDAV,
 /// plays it muted from about a third of the way in and snapshots a frame.
 ///
 /// Strictly one at a time, and held while a scan or playback is using the
@@ -38,7 +38,7 @@ final class FrameGrabber: NSObject {
 
     /// JPEG of a frame from the file at `path`, or nil if there isn't one to
     /// be had (or the caller stopped waiting).
-    func jpeg(for path: String, config: SMBConfig) async -> Data? {
+    func jpeg(for path: String, config: ShareConfig) async -> Data? {
         guard !failed.contains(path), let url = config.playbackURL(for: path) else { return nil }
         while true {
             guard Date() >= offlineUntil else { return nil }
@@ -72,7 +72,7 @@ final class FrameGrabber: NSObject {
 
     /// Whether a failed grab was the file's fault or the share's. Runs while
     /// this grab still holds its turn, so it's never alongside another read.
-    private func shareIsReachable(_ path: String, config: SMBConfig) async -> Bool {
+    private func shareIsReachable(_ path: String, config: ShareConfig) async -> Bool {
         guard let source = try? ServerConnection.shared.source(for: config) else { return false }
         return (try? await source.list((path as NSString).deletingLastPathComponent)) != nil
     }

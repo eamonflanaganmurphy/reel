@@ -1,16 +1,20 @@
 import Foundation
 import ReelCore
 
-// Runs the app's scanner against a real share from a terminal, so the SMB
+// Runs the app's scanner against a real share from a terminal, so the share
 // settings and the parser can be checked without building the iOS app:
 //
 //   swift run reelscan --host 192.168.8.1 --share media --user me --password pw \
 //       --movies movies --shows TV --shows childrens-shows
 //
+// For a WebDAV server, give its address instead of --host and --share:
+//
+//   swift run reelscan --webdav http://192.168.8.1/webdav --user me --password pw --movies movies
+//
 // Add --all to print every item instead of a summary.
 
 var args = Array(CommandLine.arguments.dropFirst())
-var host = "", share = "", user = "", password = ""
+var host = "", share = "", webDAV = "", user = "", password = ""
 var libraries: [(String, LibraryKind)] = []
 var printAll = false
 
@@ -23,6 +27,7 @@ while !args.isEmpty {
     switch flag {
     case "--host": host = value()
     case "--share": share = value()
+    case "--webdav": webDAV = value()
     case "--user": user = value()
     case "--password": password = value()
     case "--movies": libraries.append((value(), .movies))
@@ -32,13 +37,20 @@ while !args.isEmpty {
     }
 }
 
-guard !host.isEmpty, !share.isEmpty, !libraries.isEmpty else {
-    print("usage: reelscan --host H --share S [--user U --password P] (--movies PATH | --shows PATH)... [--all]")
+guard !host.isEmpty && !share.isEmpty || !webDAV.isEmpty, !libraries.isEmpty else {
+    print("usage: reelscan (--host H --share S | --webdav URL) [--user U --password P] (--movies PATH | --shows PATH)... [--all]")
     exit(2)
 }
 
-let config = SMBConfig(host: host, share: share, username: user, password: password)
-let source = try SMBFileSource(config: config)
+let config: ShareConfig
+if webDAV.isEmpty {
+    config = ShareConfig(host: host, share: share, username: user, password: password)
+} else {
+    let address = ShareConfig.parse(webDAVAddress: webDAV)
+    config = ShareConfig(kind: .webDAV, host: address.host, share: address.path, username: user, password: password,
+                         secure: address.secure ?? !ShareConfig.prefersPlainHTTP(host: address.host))
+}
+let source = try config.makeSource()
 let scanner = LibraryScanner(source: source)
 
 for (path, kind) in libraries {

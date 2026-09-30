@@ -3,7 +3,8 @@
 An iPhone and iPad player for the movies and TV on the Nomad router's SMB
 share (a mirror of Bucket_A). It connects straight to the share, so there's no
 server software involved: the app lists the folders itself, looks titles up on
-TMDB, and plays the files with VLC. Nothing is transcoded.
+TMDB, and plays the files with VLC. Nothing is transcoded. It can use a WebDAV
+server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve webdav`.
 
 - **Library:** Home (Keep Watching, Recently Added), plus a poster grid per library with its own Keep Watching row
 - **Watch progress on the share:** where you got to in each video is kept in a hidden `.reel/progress` folder on
@@ -66,8 +67,14 @@ iPhone, and pick it in SideStore under **My Apps** → **+**.
 
 Open the Settings tab:
 
-- **SMB server:** the router's IP (e.g. `192.168.8.1`), the share name, and the SMB username and password.
-  Tap **Test Connection** with the share left empty to see which shares the router offers.
+- **Server:** pick **SMB** or **WebDAV**, then:
+  - **SMB:** the router's IP (e.g. `192.168.8.1`), the share name, and the SMB username and password.
+    Tap **Test Connection** with the share left empty to see which shares the router offers.
+  - **WebDAV:** the server's WebDAV address including any folder, e.g. `http://192.168.8.1/webdav` or
+    `https://cloud.example.com/remote.php/dav/files/USER`, and its username and password. With no `http://` or
+    `https://`, Reel uses http for an IP address or `.local` name and https for anything else.
+  Library folders, watch progress and artwork are all relative to the share, so pointing WebDAV at the same folder
+  the SMB share holds keeps the library and everyone's progress as they were.
 - **Libraries:** these default to `movies`, `TV` and `childrens-shows`, the Bucket_A folder names. Change them
   if the share on the router is laid out differently. The folder button lists what's actually there once
   Test Connection has succeeded.
@@ -99,6 +106,7 @@ swift run reelscan --host 192.168.8.1 --share media --user USER --password PASS 
 ```
 
 It prints what it found, plus anything it couldn't name properly. Add `--all` to list everything.
+For a WebDAV server, use `--webdav http://192.168.8.1/webdav` in place of `--host` and `--share`.
 
 ## Layout
 
@@ -113,7 +121,9 @@ Reel/                  the iOS app: SwiftUI + SwiftData
 Packages/ReelCore/     no UI, builds on Linux too
   NameParser           release names → titles, years, SxxEyy, subtitle languages
   LibraryScanner       walks a library folder into movies / shows / episodes
-  SMBFileSource        AMSMB2 wrapper; builds the smb:// URLs VLC plays
+  ShareConfig          server settings, errors, and the smb:// or http(s):// URLs VLC plays
+  SMBFileSource        AMSMB2 wrapper
+  WebDAVFileSource     WebDAV over URLSession: PROPFIND listings, ranged reads, progress writes
   TMDB                 search and season lookups
 ```
 
@@ -126,3 +136,5 @@ After editing `project.yml`, regenerate the project with `brew install xcodegen 
 - **Remote playback:** away from the router's network you'd need a VPN into it, and enough upload
   bandwidth at the Nomad end for the file's bitrate, since there's no transcoding to fall back on.
 - **SMB version:** VLC's SMB client needs SMB2 or later on the router, not SMB1.
+- **WebDAV over https:** the server needs a certificate iOS trusts. A NAS's self-signed one won't do;
+  use http on your own network, or a real certificate (e.g. Tailscale's `tailscale cert`).

@@ -4,178 +4,43 @@ import Foundation
 import FoundationNetworking
 #endif
 
-public struct SMBConfig: Codable, Hashable, Sendable {
-    /// Host or IP, optionally with a port: "192.168.8.1" or "nomad.local:445".
-    public var host: String
-    public var share: String
-    public var username: String
-    public var password: String
-    public var domain: String
-
-    public init(host: String, share: String, username: String, password: String, domain: String = "") {
-        self.host = host
-        self.share = share
-        self.username = username
-        self.password = password
-        self.domain = domain
-    }
-
-    public var isComplete: Bool { !host.isEmpty && !share.isEmpty }
-
-    /// Accepts the address however it was typed or pasted: "192.168.8.1",
-    /// "smb://nomad.local/media", "\\\\nomad\\media\\movies", "user@host/share".
-    /// Anything after the host is returned as a share and a folder path.
-    public static func parse(address raw: String) -> (host: String, share: String?, path: String?) {
-        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\\", with: "/")
-        for scheme in ["smb://", "cifs://", "afp://"] where s.lowercased().hasPrefix(scheme) {
-            s = String(s.dropFirst(scheme.count))
-        }
-        while s.hasPrefix("/") { s.removeFirst() }
-        var parts = s.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
-        guard !parts.isEmpty else { return ("", nil, nil) }
-        var host = parts.removeFirst()
-        if let at = host.lastIndex(of: "@") { host = String(host[host.index(after: at)...]) }
-        let share = parts.isEmpty ? nil : parts.removeFirst()
-        let path = parts.isEmpty ? nil : parts.joined(separator: "/")
-        return (host, share?.removingPercentEncoding ?? share, path?.removingPercentEncoding ?? path)
-    }
-
-    var serverURL: URL? { URL(string: "smb://\(host)") }
+extension ShareConfig {
+    var smbServerURL: URL? { URL(string: "smb://\(host)") }
 
     /// No username means a guest login, as the Files app does.
-    var credential: URLCredential {
+    var smbCredential: URLCredential {
         URLCredential(user: username.isEmpty ? "guest" : username, password: password, persistence: .forSession)
-    }
-
-    /// smb:// URL for the player. Credentials are embedded because that's what
-    /// VLC's smb2 module reads first; the URL never leaves the device.
-    public func playbackURL(for path: String) -> URL? {
-        var c = URLComponents()
-        c.scheme = "smb"
-        let hostParts = host.split(separator: ":", maxSplits: 1)
-        c.host = String(hostParts.first ?? "")
-        if hostParts.count == 2 { c.port = Int(hostParts[1]) }
-        if !username.isEmpty {
-            c.percentEncodedUser = Self.encode(username)
-            c.percentEncodedPassword = Self.encode(password)
-        }
-        let components = [share] + path.split(separator: "/").map(String.init)
-        c.percentEncodedPath = "/" + components.map(Self.encode).joined(separator: "/")
-        return c.url
-    }
-
-    private static let unreserved = CharacterSet(
-        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
-
-    /// Everything but RFC 3986 unreserved characters gets escaped, so names
-    /// with "#", "?", "[", "%" or emoji survive the round trip.
-    static func encode(_ s: String) -> String {
-        s.addingPercentEncoding(withAllowedCharacters: unreserved) ?? s
-    }
-}
-
-/// A failure with enough context to tell the user what to fix. libsmb2
-/// reports everything as errno values, and some are misleading on their own:
-/// a wrong password arrives as ECONNREFUSED, an unknown hostname as EIO.
-public enum SMBError: LocalizedError {
-    case invalidHost(String)
-    /// Couldn't reach or log in to the server.
-    case server(host: String, code: Int32, detail: String)
-    /// Logged in, but the share wouldn't open.
-    case share(name: String, code: Int32, detail: String)
-    /// A folder inside the share couldn't be listed.
-    case folder(path: String, code: Int32, detail: String)
-
-    public var errorDescription: String? {
-        switch self {
-        case .invalidHost(let h):
-            return "“\(h)” isn't a valid server address."
-        case .server(let host, let code, let detail):
-            switch code {
-            case ECONNREFUSED, EACCES, EPERM:
-                return "\(host) refused the login. Check the username and password (leave both empty for guest access)."
-            case EIO where detail.localizedCaseInsensitiveContains("resolve"):
-                return "Couldn't find a server called “\(host)”. Try its IP address, or pick it under Nearby Servers."
-            case ETIMEDOUT, EHOSTUNREACH, ENETUNREACH, EHOSTDOWN:
-                return "\(host) didn't answer. Are you on the router's network, and has Reel been allowed Local Network access?"
-            default:
-                return "Couldn't connect to \(host): \(detail) (\(code))"
-            }
-        case .share(let name, let code, let detail):
-            switch code {
-            case ENOENT, ENODEV:
-                return "The server has no share called “\(name)”. Clear the Share field and test again to list them."
-            case EACCES, EPERM, ECONNREFUSED:
-                return "This login isn't allowed to open the share “\(name)”."
-            default:
-                return "Couldn't open the share “\(name)”: \(detail) (\(code))"
-            }
-        case .folder(let path, let code, let detail):
-            switch code {
-            case ENOENT, ENOTDIR:
-                return "There's no folder “\(path)” in the share."
-            default:
-                return "Couldn't list “\(path)”: \(detail) (\(code))"
-            }
-        }
-    }
-
-    static func code(of error: any Error) -> (Int32, String) {
-        let ns = error as NSError
-        let code = ns.domain == NSPOSIXErrorDomain ? Int32(ns.code) : -1
-        return (code, ns.localizedDescription)
-    }
-}
-
-/// Bare names like "nomad" only resolve through Bonjour as "nomad.local".
-public enum HostResolver {
-    public static func resolves(_ host: String) -> Bool {
-        let name = host.split(separator: ":").first.map(String.init) ?? host
-        var result: UnsafeMutablePointer<addrinfo>?
-        let rc = getaddrinfo(name, nil, nil, &result)
-        if let result { freeaddrinfo(result) }
-        return rc == 0
-    }
-
-    /// The host itself if it resolves, else "<host>.local" if that does.
-    public static func bestHost(_ host: String) async -> String {
-        await Task.detached {
-            if resolves(host) { return host }
-            let isBareName = !host.contains(".") && !host.contains(":")
-            if isBareName, resolves(host + ".local") { return host + ".local" }
-            return host
-        }.value
     }
 }
 
 /// One connection to one share. AMSMB2 queues requests internally, so a
 /// single instance can be shared across tasks.
-public final class SMBFileSource: FileSource, ProgressStorage, @unchecked Sendable {
-    public let config: SMBConfig
+public final class SMBFileSource: ShareSource, @unchecked Sendable {
+    public let config: ShareConfig
     private let manager: SMB2Manager
     private let lock = NSLock()
     // Guarded by lock. Concurrent callers share one connection attempt.
     private var connection: Task<Void, any Error>?
 
-    public init(config: SMBConfig) throws {
-        guard let url = config.serverURL,
-              let manager = SMB2Manager(url: url, domain: config.domain, credential: config.credential)
-        else { throw SMBError.invalidHost(config.host) }
+    public init(config: ShareConfig) throws {
+        guard let url = config.smbServerURL,
+              let manager = SMB2Manager(url: url, domain: config.domain, credential: config.smbCredential)
+        else { throw ShareError.invalidHost(config.host) }
         self.config = config
         self.manager = manager
         manager.timeout = 20
     }
 
     /// Share names on the server, for the settings screen.
-    public static func listShares(config: SMBConfig) async throws -> [String] {
-        guard let url = config.serverURL,
-              let manager = SMB2Manager(url: url, domain: config.domain, credential: config.credential)
-        else { throw SMBError.invalidHost(config.host) }
+    public static func listShares(config: ShareConfig) async throws -> [String] {
+        guard let url = config.smbServerURL,
+              let manager = SMB2Manager(url: url, domain: config.domain, credential: config.smbCredential)
+        else { throw ShareError.invalidHost(config.host) }
         do {
             return try await manager.listShares().map(\.name).filter { !$0.hasSuffix("$") }
         } catch {
-            let (code, detail) = SMBError.code(of: error)
-            throw SMBError.server(host: config.host, code: code, detail: detail)
+            let (code, detail) = ShareError.code(of: error)
+            throw ShareError.server(host: config.host, code: code, detail: detail)
         }
     }
 
@@ -189,11 +54,11 @@ public final class SMBFileSource: FileSource, ProgressStorage, @unchecked Sendab
                 } catch {
                     // libsmb2 connects and opens the share in one call; a
                     // missing share is ENOENT/ENODEV, anything else is the server.
-                    let (code, detail) = SMBError.code(of: error)
+                    let (code, detail) = ShareError.code(of: error)
                     if code == ENOENT || code == ENODEV || detail.contains("BAD_NETWORK_NAME") {
-                        throw SMBError.share(name: share, code: code, detail: detail)
+                        throw ShareError.share(name: share, code: code, detail: detail)
                     }
-                    throw SMBError.server(host: host, code: code, detail: detail)
+                    throw ShareError.server(host: host, code: code, detail: detail)
                 }
             }
             connection = t
@@ -216,7 +81,7 @@ public final class SMBFileSource: FileSource, ProgressStorage, @unchecked Sendab
         try await connect()
         do {
             return try await operation()
-        } catch let error where Self.isConnectionError(SMBError.code(of: error).0) {
+        } catch let error where Self.isConnectionError(ShareError.code(of: error).0) {
             invalidate()
             try await connect()
             return try await operation()
@@ -233,14 +98,14 @@ public final class SMBFileSource: FileSource, ProgressStorage, @unchecked Sendab
         let items: [[URLResourceKey: Any]]
         do {
             items = try await withConnection { try await manager.contentsOfDirectory(atPath: base) }
-        } catch let error as SMBError {
+        } catch let error as ShareError {
             throw error
         } catch {
-            let (code, detail) = SMBError.code(of: error)
+            let (code, detail) = ShareError.code(of: error)
             // A lost connection isn't the folder's fault, and callers treat
             // folder errors as "wrong folder" or "nothing there yet".
-            if Self.isConnectionError(code) { throw SMBError.server(host: config.host, code: code, detail: detail) }
-            throw SMBError.folder(path: base.isEmpty ? "/" : base, code: code, detail: detail)
+            if Self.isConnectionError(code) { throw ShareError.server(host: config.host, code: code, detail: detail) }
+            throw ShareError.folder(path: base.isEmpty ? "/" : base, code: code, detail: detail)
         }
         return items.compactMap { item -> FileEntry? in
             guard let name = item[.nameKey] as? String, name != ".", name != ".." else { return nil }
@@ -256,8 +121,7 @@ public final class SMBFileSource: FileSource, ProgressStorage, @unchecked Sendab
         }
     }
 
-    /// Whole-file read for small things: subtitles and thumbnails.
-    public func read(_ path: String, maxBytes: UInt64 = 20_000_000) async throws -> Data {
+    public func read(_ path: String, maxBytes: UInt64) async throws -> Data {
         let path = Self.normalize(path)
         return try await withConnection {
             try await manager.contents(atPath: path, range: 0..<maxBytes, progress: nil)
@@ -284,8 +148,6 @@ public final class SMBFileSource: FileSource, ProgressStorage, @unchecked Sendab
         }
     }
 
-    /// Makes the next request check the session is still alive (and open a
-    /// new one if not), e.g. after the app has been suspended.
     public func invalidate() {
         lock.withLock { connection = nil }
     }

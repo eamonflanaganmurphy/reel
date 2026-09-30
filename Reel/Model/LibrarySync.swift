@@ -25,7 +25,7 @@ final class LibrarySync {
         await settings.tidyAddress()
         var problems: [String] = []
         do {
-            let config = settings.smbConfig
+            let config = settings.shareConfig
             let source = try ServerConnection.shared.source(for: config)
             let scanner = LibraryScanner(source: source)
 
@@ -34,7 +34,7 @@ final class LibrarySync {
                 let result: ScanResult
                 do {
                     result = try await scanner.scan(root: library.path, kind: library.kind)
-                } catch let error as SMBError {
+                } catch let error as ShareError {
                     // A wrong folder spoils one library, not the rest. Losing
                     // the server or the share still stops everything.
                     guard case .folder = error else { throw error }
@@ -322,7 +322,7 @@ final class LibrarySync {
     }
 
     nonisolated static func describe(_ error: Error) -> String {
-        if let smb = error as? SMBError, let message = smb.errorDescription { return message }
+        if let share = error as? ShareError, let message = share.errorDescription { return message }
         return error.localizedDescription
     }
 }

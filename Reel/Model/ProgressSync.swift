@@ -65,7 +65,7 @@ final class ProgressSync {
         busy = true
         defer { busy = false }
         do {
-            let source = try ServerConnection.shared.source(for: settings.smbConfig)
+            let source = try ServerConnection.shared.source(for: settings.shareConfig)
             let remote = try await SharedProgress.load(from: source)
             guard !remote.isEmpty else { return }
             let videos = (try? context.fetch(FetchDescriptor<Video>())) ?? []
@@ -116,7 +116,7 @@ final class ProgressSync {
         let videos = (try? context.fetch(FetchDescriptor<Video>(predicate: #Predicate { $0.progressUpdatedAt != nil }))) ?? []
         let entries = Dictionary(videos.compactMap { v in v.watchProgress.map { (v.path, $0) } }, uniquingKeysWith: { a, _ in a })
         do {
-            let source = try ServerConnection.shared.source(for: settings.smbConfig)
+            let source = try ServerConnection.shared.source(for: settings.shareConfig)
             try await SharedProgress.save(entries, device: device, to: source)
             status = .synced(.now)
         } catch {

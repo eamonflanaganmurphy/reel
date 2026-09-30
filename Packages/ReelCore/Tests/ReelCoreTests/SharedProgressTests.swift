@@ -8,7 +8,7 @@ actor MemoryProgressStorage: ProgressStorage {
     func list(_ path: String) async throws -> [FileEntry] {
         let prefix = path + "/"
         let names = files.keys.filter { $0.hasPrefix(prefix) }
-        if names.isEmpty { throw SMBError.folder(path: path, code: ENOENT, detail: "No such file or directory") }
+        if names.isEmpty { throw ShareError.folder(path: path, code: ENOENT, detail: "No such file or directory") }
         return names.map { FileEntry(name: String($0.dropFirst(prefix.count)), path: $0, isDirectory: false) }
     }
 

@@ -14,21 +14,21 @@ final class ConnectionTests: XCTestCase {
     }
 
     private func parse(_ s: String) -> [String?] {
-        let p = SMBConfig.parse(address: s)
+        let p = ShareConfig.parse(address: s)
         return [p.host, p.share, p.path]
     }
 
     func testGuestCredential() {
-        XCTAssertEqual(SMBConfig(host: "h", share: "s", username: "", password: "").credential.user, "guest")
-        XCTAssertEqual(SMBConfig(host: "h", share: "s", username: "eamon", password: "x").credential.user, "eamon")
+        XCTAssertEqual(ShareConfig(host: "h", share: "s", username: "", password: "").smbCredential.user, "guest")
+        XCTAssertEqual(ShareConfig(host: "h", share: "s", username: "eamon", password: "x").smbCredential.user, "eamon")
     }
 
     func testFriendlyErrors() {
-        let refused = SMBError.server(host: "nomad", code: ECONNREFUSED, detail: "STATUS_LOGON_FAILURE")
+        let refused = ShareError.server(host: "nomad", code: ECONNREFUSED, detail: "STATUS_LOGON_FAILURE")
         XCTAssertTrue(refused.errorDescription!.contains("refused the login"))
-        let unknown = SMBError.server(host: "nomad", code: EIO, detail: "Invalid address:nomad  Can not resolve into IPv4/v6.")
+        let unknown = ShareError.server(host: "nomad", code: EIO, detail: "Invalid address:nomad  Can not resolve into IPv4/v6.")
         XCTAssertTrue(unknown.errorDescription!.contains("Couldn't find a server"))
-        XCTAssertTrue(SMBError.share(name: "media", code: ENOENT, detail: "").errorDescription!.contains("no share called"))
+        XCTAssertTrue(ShareError.share(name: "media", code: ENOENT, detail: "").errorDescription!.contains("no share called"))
     }
 
     func testLocatorFindsNestedLibraries() async throws {

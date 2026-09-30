@@ -11,7 +11,7 @@ final class Show {
     var year: Int?
     var country: String?
     var overview: String?
-    /// "https://..." for TMDB art, "smb:<path>" for an image on the share.
+    /// "https://..." for TMDB art, "smb:<path>" for an image on the share (SMB or WebDAV).
     var posterRef: String?
     var backdropRef: String?
     var tmdbID: Int?

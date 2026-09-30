@@ -25,7 +25,7 @@ struct SettingsView: View {
     var body: some View {
         @Bindable var settings = settings
         Form {
-            if !browser.servers.isEmpty || browser.permissionDenied {
+            if settings.kind == .smb, !browser.servers.isEmpty || browser.permissionDenied {
                 Section {
                     if browser.permissionDenied {
                         Label("Reel isn't allowed on the local network. Turn on Settings → Reel → Local Network.",
@@ -49,14 +49,27 @@ struct SettingsView: View {
             }
 
             Section {
-                TextField("Address", text: $settings.host, prompt: Text("192.168.8.1"))
-                    .textContentType(.URL)
-                    .keyboardType(.URL)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                TextField("Share", text: $settings.share, prompt: Text("media"))
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
+                Picker("Connect With", selection: $settings.kind) {
+                    ForEach(ShareKind.allCases, id: \.self) { Text($0.name).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                switch settings.kind {
+                case .smb:
+                    TextField("Address", text: $settings.host, prompt: Text("192.168.8.1"))
+                        .textContentType(.URL)
+                        .keyboardType(.URL)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                    TextField("Share", text: $settings.share, prompt: Text("media"))
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                case .webDAV:
+                    TextField("Address", text: $settings.webDAVAddress, prompt: Text("http://192.168.8.1/webdav"))
+                        .textContentType(.URL)
+                        .keyboardType(.URL)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                }
                 TextField("Username", text: $settings.username)
                     .textContentType(.username)
                     .autocorrectionDisabled()
@@ -72,7 +85,7 @@ struct SettingsView: View {
                         if testing { ProgressView() }
                     }
                 }
-                .disabled(testing || settings.host.isEmpty)
+                .disabled(testing || settings.shareConfig.host.isEmpty)
                 if let testResult {
                     switch testResult {
                     case .ok(let message): Label(message, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
@@ -89,9 +102,14 @@ struct SettingsView: View {
                     }
                 }
             } header: {
-                Text("SMB Server")
+                Text("Server")
             } footer: {
-                Text("Pick the router under Nearby Servers, or type its IP address. Leave Share empty and tap Test Connection to list its shares. Leave Username and Password empty for guest access.")
+                switch settings.kind {
+                case .smb:
+                    Text("Pick the router under Nearby Servers, or type its IP address. Leave Share empty and tap Test Connection to list its shares. Leave Username and Password empty for guest access.")
+                case .webDAV:
+                    Text("The server's WebDAV address, including any folder, e.g. http://192.168.8.1/webdav or a Nextcloud or Synology WebDAV address. Libraries are folders under it. Leave Username and Password empty if the server has no login.")
+                }
             }
 
             if !foundPaths.isEmpty {
@@ -191,6 +209,11 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .onChange(of: settings.kind) {
+            testResult = nil
+            shares = []
+            foundPaths = [:]
+        }
         .onAppear { browser.start() }
         .onDisappear { browser.stop() }
         .sheet(item: $editing) { library in
@@ -233,9 +256,9 @@ struct SettingsView: View {
         shares = []
         foundPaths = [:]
         let note = await settings.tidyAddress()
-        let config = settings.smbConfig
+        let config = settings.shareConfig
         do {
-            if config.share.isEmpty {
+            if config.kind == .smb, config.share.isEmpty {
                 let names = try await SMBFileSource.listShares(config: config)
                 shares = names
                 testResult = .ok(names.isEmpty
@@ -245,7 +268,7 @@ struct SettingsView: View {
             }
             let source = try ServerConnection.shared.source(for: config)
             let top = try await source.list("")
-            var message = "Connected to “\(config.share)”."
+            var message = "Connected to “\(config.displayName)”."
             if let note { message += " " + note }
 
             // Check each library's folder, and look for any that are missing.

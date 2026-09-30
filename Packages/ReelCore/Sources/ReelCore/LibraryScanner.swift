@@ -17,7 +17,7 @@ public struct FileEntry: Sendable, Hashable {
     }
 }
 
-/// Anything that can list a directory. The SMB share in the app, an in-memory
+/// Anything that can list a directory. The share in the app, an in-memory
 /// tree in tests.
 public protocol FileSource: Sendable {
     func list(_ path: String) async throws -> [FileEntry]
@@ -235,7 +235,7 @@ public struct LibraryScanner: Sendable {
     private func listBelowRoot(_ path: String) async throws -> [FileEntry] {
         do {
             return try await source.list(path)
-        } catch let SMBError.folder(_, code, _) where [ENOENT, EACCES, EPERM, ENOTDIR].contains(code) {
+        } catch let ShareError.folder(_, code, _) where [ENOENT, EACCES, EPERM, ENOTDIR].contains(code) {
             return []
         }
     }

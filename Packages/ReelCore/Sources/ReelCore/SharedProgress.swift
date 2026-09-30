@@ -62,7 +62,7 @@ public enum SharedProgress {
         let entries: [FileEntry]
         do {
             entries = try await storage.list(folder)
-        } catch SMBError.folder {
+        } catch ShareError.folder {
             return [:]
         }
         var files: [ProgressFile] = []

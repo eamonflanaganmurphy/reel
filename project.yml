@@ -51,7 +51,11 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         # Without this iOS silently blocks connections to the router.
-        NSLocalNetworkUsageDescription: Reel connects to your SMB share to list and play your movies and TV shows.
+        NSLocalNetworkUsageDescription: Reel connects to your SMB or WebDAV share to list and play your movies and TV shows.
+        # WebDAV at home is usually plain http to an IP or a Tailscale name,
+        # which App Transport Security would otherwise block.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
         # Needed to list SMB servers the way the Files app does.
         NSBonjourServices:
           - _smb._tcp

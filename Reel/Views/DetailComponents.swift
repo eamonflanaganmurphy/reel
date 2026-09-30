@@ -96,7 +96,7 @@ struct TitleArt: View {
         }
         .task(id: logoPath) {
             let ref = TMDBClient.imageURL(logoPath)?.absoluteString
-            let image = await ArtworkStore.shared.image(for: ref, config: settings.smbConfig)
+            let image = await ArtworkStore.shared.image(for: ref, config: settings.shareConfig)
             guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.25)) { logo = image }
         }

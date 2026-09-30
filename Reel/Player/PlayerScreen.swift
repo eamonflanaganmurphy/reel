@@ -387,7 +387,7 @@ struct PlayerScreen: View {
     // MARK: Playback
 
     private func start(at seconds: Double) {
-        guard let url = settings.smbConfig.playbackURL(for: video.path) else { return }
+        guard let url = settings.shareConfig.playbackURL(for: video.path) else { return }
         controller.load(url, startAt: seconds)
         lastSaved = Date()
         scheduleHide()
@@ -397,7 +397,7 @@ struct PlayerScreen: View {
         let added = AddedSubtitles.files(for: videoPath)
         addedSubtitleCount = added.count
         let subtitles = video.subtitles
-        let config = settings.smbConfig
+        let config = settings.shareConfig
         guard !subtitles.isEmpty || !added.isEmpty else { return }
         Task {
             var local: [PlayerController.Sidecar] = []
@@ -431,7 +431,7 @@ struct PlayerScreen: View {
     private func addFromShare(_ entry: FileEntry) {
         let current = index
         let videoPath = video.path
-        let config = settings.smbConfig
+        let config = settings.shareConfig
         Task {
             do {
                 let download = try await ServerConnection.shared.download(entry.path, config: config)

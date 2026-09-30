@@ -4,18 +4,18 @@ import ReelCore
 import SwiftUI
 import UIKit
 
-/// One SMB connection for the whole app, rebuilt when the settings change.
+/// One connection to the share for the whole app, rebuilt when the settings change.
 final class ServerConnection: @unchecked Sendable {
     static let shared = ServerConnection()
 
     private let lock = NSLock()
-    private var config: SMBConfig?
-    private var source: SMBFileSource?
+    private var config: ShareConfig?
+    private var source: (any ShareSource)?
 
-    func source(for config: SMBConfig) throws -> SMBFileSource {
+    func source(for config: ShareConfig) throws -> any ShareSource {
         try lock.withLock {
             if let source, self.config == config { return source }
-            let new = try SMBFileSource(config: config)
+            let new = try config.makeSource()
             source = new
             self.config = config
             return new
@@ -29,7 +29,7 @@ final class ServerConnection: @unchecked Sendable {
     }
 
     /// Copies a file from the share into Caches, e.g. a subtitle for VLC.
-    func download(_ path: String, config: SMBConfig) async throws -> URL {
+    func download(_ path: String, config: ShareConfig) async throws -> URL {
         let data = try await source(for: config).read(path)
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("subs", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -79,7 +79,7 @@ actor ArtworkStore {
         memory.totalCostLimit = 150_000_000
     }
 
-    func image(for ref: String?, config: SMBConfig) async -> UIImage? {
+    func image(for ref: String?, config: ShareConfig) async -> UIImage? {
         guard let ref, !ref.isEmpty else { return nil }
         if let hit = memory.object(forKey: ref as NSString) { return hit }
 
@@ -191,10 +191,11 @@ actor ArtworkStore {
         URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 15)
     }
 
-    private static func fetch(_ ref: String, config: SMBConfig) async -> Data? {
+    private static func fetch(_ ref: String, config: ShareConfig) async -> Data? {
         if ref.hasPrefix("frame:") {
             return await FrameGrabber.shared.jpeg(for: String(ref.dropFirst(6)), config: config)
         }
+        // "smb:" predates WebDAV; it means the share, whatever it's served over.
         if ref.hasPrefix("smb:") {
             let path = String(ref.dropFirst(4))
             return try? await ServerConnection.shared.source(for: config).read(path, maxBytes: 5_000_000)
@@ -255,7 +256,7 @@ struct ArtworkImage: View {
             var loaded: UIImage?
             for candidate in [ref] + fallbackRefs where loaded == nil {
                 guard !Task.isCancelled else { return }
-                loaded = await ArtworkStore.shared.image(for: candidate, config: settings.smbConfig)
+                loaded = await ArtworkStore.shared.image(for: candidate, config: settings.shareConfig)
             }
             // A superseded load mustn't blank what its replacement shows.
             guard !Task.isCancelled else { return }

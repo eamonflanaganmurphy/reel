@@ -94,7 +94,7 @@ final class LibraryScannerTests: XCTestCase {
     }
 
     func testPlaybackURLEscaping() throws {
-        let config = SMBConfig(host: "192.168.8.1", share: "media", username: "eamon", password: "p@ss#1")
+        let config = ShareConfig(host: "192.168.8.1", share: "media", username: "eamon", password: "p@ss#1")
         let path = "TV/Bob's Burgers/Season 4/What [a] #name? 100%.mkv"
         let url = try XCTUnwrap(config.playbackURL(for: path))
         let c = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
