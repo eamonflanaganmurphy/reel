@@ -60,7 +60,9 @@ final class LibrarySync {
             let key = settings.tmdbKey.trimmingCharacters(in: .whitespaces)
             if !key.isEmpty {
                 do {
-                    try await fetchMetadata(client: TMDBClient(apiKey: key), settings: settings, context: context)
+                    let client = TMDBClient(apiKey: key)
+                    try await fetchMetadata(client: client, settings: settings, context: context)
+                    try await fetchDetails(client: client, context: context)
                     await saveArtwork(context: context)
                 } catch let error as URLError where ArtworkStore.isOffline(error) {
                     // No internet, e.g. on the router's own WiFi on a plane.
@@ -253,6 +255,32 @@ final class LibrarySync {
             }
             try context.save()
         }
+    }
+
+    /// Cast, genres and related titles for everything matched on TMDB, which
+    /// the actor pages and More Like This look through. Only what's missing:
+    /// a page refreshes its own when it's opened.
+    private func fetchDetails(client: TMDBClient, context: ModelContext) async throws {
+        let movies = try context.fetch(FetchDescriptor<Video>(predicate: #Predicate { $0.isMovie && $0.tmdbID != nil }))
+            .filter { DetailsLoader.isMissing($0.details, fetchedAt: $0.detailsFetchedAt) }
+        let shows = try context.fetch(FetchDescriptor<Show>(predicate: #Predicate { $0.tmdbID != nil }))
+            .filter { DetailsLoader.isMissing($0.details, fetchedAt: $0.detailsFetchedAt) }
+        let total = movies.count + shows.count
+        var done = 0
+        func step() throws {
+            done += 1
+            state = .scanning("Fetching cast and details \(done) of \(total)…")
+            if done % 20 == 0 { try context.save() }
+        }
+        for movie in movies {
+            try await DetailsLoader.fetch(movie, client: client)
+            try step()
+        }
+        for show in shows {
+            try await DetailsLoader.fetch(show, client: client)
+            try step()
+        }
+        try context.save()
     }
 
     /// TMDB artwork is fetched while there's internet, so the library looks

@@ -40,8 +40,7 @@ struct HomeView: View {
         }
         .navigationTitle("Reel")
         .refreshable { await sync.run(settings: settings, context: context) }
-        .navigationDestination(for: Video.self) { MovieDetailView(video: $0) }
-        .navigationDestination(for: Show.self) { ShowDetailView(show: $0) }
+        .libraryDestinations()
     }
 
     @ViewBuilder

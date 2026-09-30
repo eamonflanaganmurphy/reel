@@ -78,8 +78,7 @@ struct LibraryView: View {
                 Image(systemName: "arrow.up.arrow.down")
             }
         }
-        .navigationDestination(for: Video.self) { MovieDetailView(video: $0) }
-        .navigationDestination(for: Show.self) { ShowDetailView(show: $0) }
+        .libraryDestinations()
     }
 
     private var sortedMovies: [Video] {

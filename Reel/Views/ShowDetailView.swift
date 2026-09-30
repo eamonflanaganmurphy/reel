@@ -1,4 +1,5 @@
 import ReelCore
+import SwiftData
 import SwiftUI
 
 struct ShowDetailView: View {
@@ -18,6 +19,7 @@ struct ShowDetailView: View {
 private struct ShowPage: View {
     @Bindable var show: Show
     @Environment(AppSettings.self) private var settings
+    @Query(sort: \Show.updatedAt, order: .reverse) private var shows: [Show]
     @Environment(PlaybackCenter.self) private var playback
     @Environment(\.horizontalSizeClass) private var sizeClass
     /// Chosen when the page opens, then only by the user, so marking a
@@ -83,6 +85,14 @@ private struct ShowPage: View {
 
                 if let cast = details?.cast, !cast.isEmpty {
                     CastRow(cast: cast)
+                }
+
+                MoreLikeThisRow(title: show, candidates: shows, libraryName: settings.libraryName(for: show.libraryID)) { other in
+                    NavigationLink(value: other) {
+                        PosterCard(ref: other.posterRef, fallbackRefs: other.fallbackRefs, title: other.title,
+                                   subtitle: other.year.map(String.init), symbol: "tv")
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.bottom, 32)

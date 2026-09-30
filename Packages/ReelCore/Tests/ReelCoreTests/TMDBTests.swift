@@ -31,12 +31,13 @@ final class TMDBTests: XCTestCase {
         let json = """
         {"id":603,"tagline":"Welcome to the Real World.","runtime":136,"vote_average":8.2,"vote_count":26000,
          "genres":[{"id":28,"name":"Action"},{"id":878,"name":"Science Fiction"}],
-         "credits":{"cast":[{"name":"Keanu Reeves","character":"Neo","profile_path":"/k.jpg","order":0},
+         "credits":{"cast":[{"id":6384,"name":"Keanu Reeves","character":"Neo","profile_path":"/k.jpg","order":0},
                             {"name":"Laurence Fishburne","character":"","profile_path":null,"order":1}],
                     "crew":[{"name":"Lana Wachowski","job":"Director"},{"name":"Bill Pope","job":"Director of Photography"}]},
          "release_dates":{"results":[{"iso_3166_1":"US","release_dates":[{"certification":"","type":1},{"certification":"R","type":3}]},
                                      {"iso_3166_1":"DK","release_dates":[{"certification":"15","type":3}]}]},
-         "images":{"logos":[{"file_path":"/logo.svg","iso_639_1":"en"},{"file_path":"/logo.png","iso_639_1":"en"}]}}
+         "images":{"logos":[{"file_path":"/logo.svg","iso_639_1":"en"},{"file_path":"/logo.png","iso_639_1":"en"}]},
+         "recommendations":{"page":1,"results":[{"id":604},{"id":605}]},"similar":{"page":1,"results":[{"id":605},{"id":27205}]}}
         """
         let raw = try TMDBClient.decoder.decode(TMDBMovieDetails.self, from: Data(json.utf8))
         let details = raw.details(region: "DK")
@@ -50,6 +51,9 @@ final class TMDBTests: XCTestCase {
         XCTAssertEqual(details.makers, ["Lana Wachowski"])
         XCTAssertEqual(details.cast.map(\.name), ["Keanu Reeves", "Laurence Fishburne"])
         XCTAssertNil(details.cast[1].character)
+        XCTAssertEqual(details.cast[0].id, 6384)
+        XCTAssertEqual(details.related, [604, 605, 27205])
+        XCTAssertEqual(details.schema, TMDBDetails.currentSchema)
 
         // Round-trips as it's stored on the model.
         let stored = try JSONDecoder().decode(TMDBDetails.self, from: JSONEncoder().encode(details))
@@ -66,6 +70,7 @@ final class TMDBTests: XCTestCase {
          "images":{"logos":[]}}
         """
         let details = try TMDBClient.decoder.decode(TMDBShowDetails.self, from: Data(json.utf8)).details(region: "DK")
+        XCTAssertEqual(details.related, [])
         XCTAssertNil(details.tagline)
         XCTAssertNil(details.runtime)
         XCTAssertNil(details.rating, "5 votes is too few to show")
@@ -75,6 +80,36 @@ final class TMDBTests: XCTestCase {
         XCTAssertEqual(details.network, "ABC Kids")
         XCTAssertEqual(details.cast.first?.character, "Bandit (voice)")
         XCTAssertEqual(details.cast.first?.episodeCount, 150)
+    }
+
+    func testDecodeDetailsStoredByAnOlderVersion() throws {
+        let json = #"{"genres":["Animation"],"makers":[],"cast":[{"name":"Dave McCormack","character":"Bandit"}]}"#
+        let details = try JSONDecoder().decode(TMDBDetails.self, from: Data(json.utf8))
+        XCTAssertEqual(details.schema, 0, "so it's fetched again")
+        XCTAssertEqual(details.related, [])
+        XCTAssertNil(details.cast.first?.id)
+    }
+
+    func testMoreLikeThis() {
+        func details(_ genres: [String], rating: Double? = nil, related: [Int] = []) -> TMDBDetails {
+            TMDBDetails(tagline: nil, genres: genres, runtime: nil, rating: rating, certification: nil, logoPath: nil,
+                        makers: [], network: nil, cast: [], related: related)
+        }
+        let target = details(["Action", "Science Fiction", "Thriller"], related: [30, 10])
+        let candidates: [MoreLikeThis.Candidate] = [
+            .init(tmdbID: 1, details: details(["Action", "Science Fiction"], rating: 6)),
+            .init(tmdbID: 2, details: details(["Action"])),                       // one genre of three: not enough
+            .init(tmdbID: 10, details: details(["Comedy"])),                      // TMDB says so, whatever the genres
+            .init(tmdbID: 3, details: details(["Action", "Science Fiction", "Thriller"], rating: 5)),
+            .init(tmdbID: nil, details: nil),
+            .init(tmdbID: 30, details: nil),
+            .init(tmdbID: 4, details: details(["Science Fiction", "Thriller"], rating: 8)),
+        ]
+        XCTAssertEqual(MoreLikeThis.rank(for: target, candidates: candidates), [5, 2, 3, 6, 0])
+        XCTAssertEqual(MoreLikeThis.rank(for: target, candidates: candidates, limit: 2), [5, 2])
+        XCTAssertEqual(MoreLikeThis.rank(for: nil, candidates: candidates), [])
+        // A single genre only needs that one.
+        XCTAssertEqual(MoreLikeThis.rank(for: details(["Action"]), candidates: Array(candidates.prefix(2))), [0, 1])
     }
 
     func testMovieYearTolerance() throws {

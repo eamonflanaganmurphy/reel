@@ -11,7 +11,10 @@ TMDB, and plays the files with VLC. Nothing is transcoded.
   Each install writes its own file and the newest entry wins, so the SMB login needs write access.
 - **Detail pages:** movie and show pages with a full-width backdrop fading into a page tinted by the artwork, the title
   logo, genres, age and TMDB ratings, cast with photos, directors or creators, seasons, episode stills and descriptions.
-  The cast and the rest come from TMDB the first time a page opens and are kept, so they show offline too.
+  Tap anyone in the cast for their photo, biography and everything in the library they're in. **More Like This** picks
+  from the library, TMDB's recommendations first, then titles sharing the most genres (or, for YouTube downloads with
+  no TMDB match, the rest of that library). Cast, genres and recommendations for the whole library come from TMDB during
+  the scan, one request per title the first time, and are kept, so all of this works offline too.
 - **Thumbnails:** anything without a TMDB poster or episode still shows a frame from the video itself. Frames are
   taken one at a time, wait while a scan or playback is running, and are cached, so each file is only read once.
   A show tries an episode still, then frames from its first three episodes; an episode with no readable frame uses the

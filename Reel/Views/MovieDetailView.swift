@@ -1,4 +1,5 @@
 import ReelCore
+import SwiftData
 import SwiftUI
 
 struct MovieDetailView: View {
@@ -18,6 +19,7 @@ struct MovieDetailView: View {
 private struct MoviePage: View {
     @Bindable var video: Video
     @Environment(AppSettings.self) private var settings
+    @Query(filter: #Predicate<Video> { $0.isMovie }, sort: \Video.addedAt, order: .reverse) private var movies: [Video]
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
@@ -39,6 +41,15 @@ private struct MoviePage: View {
 
                 if let cast = details?.cast, !cast.isEmpty {
                     CastRow(cast: cast)
+                }
+
+                MoreLikeThisRow(title: video, candidates: movies, libraryName: settings.libraryName(for: video.libraryID)) { movie in
+                    NavigationLink(value: movie) {
+                        PosterCard(ref: movie.posterRef, fallbackRefs: [movie.frameRef], title: movie.title,
+                                   subtitle: movie.year.map(String.init),
+                                   progress: movie.isInProgress ? movie.progress : 0, watched: movie.watched)
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 FileInfo(video: video)

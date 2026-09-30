@@ -45,6 +45,11 @@ public struct TMDBSeason: Decodable, Sendable, Equatable {
 /// What a movie or show page shows beyond the scan's basics. Kept as JSON on
 /// the model, so it's encoded with plain keys rather than TMDB's.
 public struct TMDBDetails: Codable, Sendable, Equatable {
+    /// Bumped when a field is added, so details fetched before it are
+    /// fetched again rather than missing it until they're a month old.
+    public static let currentSchema = 2
+    public var schema = 0
+
     public var tagline: String?
     public var genres: [String] = []
     /// Minutes; a typical episode's for a show.
@@ -59,21 +64,89 @@ public struct TMDBDetails: Codable, Sendable, Equatable {
     public var makers: [String] = []
     public var network: String?
     public var cast: [TMDBCastMember] = []
+    /// TMDB's recommended and similar titles, best first: movie IDs for a
+    /// movie, show IDs for a show.
+    public var related: [Int] = []
+
+    init(tagline: String?, genres: [String], runtime: Int?, rating: Double?, certification: String?, logoPath: String?,
+         makers: [String], network: String?, cast: [TMDBCastMember], related: [Int]) {
+        schema = Self.currentSchema
+        self.tagline = tagline
+        self.genres = genres
+        self.runtime = runtime
+        self.rating = rating
+        self.certification = certification
+        self.logoPath = logoPath
+        self.makers = makers
+        self.network = network
+        self.cast = cast
+        self.related = related
+    }
+
+    /// Tolerates JSON stored by an older version, which lacks newer fields.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        schema = try c.decodeIfPresent(Int.self, forKey: .schema) ?? 0
+        tagline = try c.decodeIfPresent(String.self, forKey: .tagline)
+        genres = try c.decodeIfPresent([String].self, forKey: .genres) ?? []
+        runtime = try c.decodeIfPresent(Int.self, forKey: .runtime)
+        rating = try c.decodeIfPresent(Double.self, forKey: .rating)
+        certification = try c.decodeIfPresent(String.self, forKey: .certification)
+        logoPath = try c.decodeIfPresent(String.self, forKey: .logoPath)
+        makers = try c.decodeIfPresent([String].self, forKey: .makers) ?? []
+        network = try c.decodeIfPresent(String.self, forKey: .network)
+        cast = try c.decodeIfPresent([TMDBCastMember].self, forKey: .cast) ?? []
+        related = try c.decodeIfPresent([Int].self, forKey: .related) ?? []
+    }
 }
 
 public struct TMDBCastMember: Codable, Sendable, Equatable, Hashable {
+    /// TMDB's person ID, the same across every title they're in.
+    public var id: Int?
     public var name: String
     public var character: String?
     public var profilePath: String?
     /// Episodes they're in, for a show.
     public var episodeCount: Int?
+
+    public init(id: Int?, name: String, character: String? = nil, profilePath: String? = nil, episodeCount: Int? = nil) {
+        self.id = id
+        self.name = name
+        self.character = character
+        self.profilePath = profilePath
+        self.episodeCount = episodeCount
+    }
+}
+
+/// `person/{id}`, for the page listing someone's titles.
+public struct TMDBPerson: Decodable, Sendable, Equatable {
+    public var name: String
+    public var biography: String?
+    public var birthday: String?
+    public var deathday: String?
+    public var placeOfBirth: String?
+    public var knownForDepartment: String?
+    public var profilePath: String?
+}
+
+/// Just the IDs from a page of `recommendations` or `similar`.
+struct TMDBIDPage: Decodable {
+    struct Item: Decodable { var id: Int }
+    var results: [Item]
+
+    /// Recommendations (what people who liked it watched) first, then
+    /// similar (shared genres and keywords), without repeats.
+    static func merge(_ pages: TMDBIDPage?...) -> [Int] {
+        var seen = Set<Int>()
+        return pages.flatMap { $0?.results ?? [] }.map(\.id).filter { seen.insert($0).inserted }
+    }
 }
 
 /// `movie/{id}` with credits, release dates and images appended.
 struct TMDBMovieDetails: Decodable {
     struct Named: Decodable { var name: String }
     struct Credits: Decodable {
-        struct Cast: Decodable { var name: String; var character: String?; var profilePath: String? }
+        struct Cast: Decodable { var id: Int?; var name: String; var character: String?; var profilePath: String? }
         struct Crew: Decodable { var name: String; var job: String? }
         var cast: [Cast]
         var crew: [Crew]
@@ -95,6 +168,8 @@ struct TMDBMovieDetails: Decodable {
     var credits: Credits?
     var releaseDates: ReleaseDates?
     var images: TMDBImages?
+    var recommendations: TMDBIDPage?
+    var similar: TMDBIDPage?
 
     func details(region: String) -> TMDBDetails {
         let certifications = { (code: String) in
@@ -111,8 +186,9 @@ struct TMDBMovieDetails: Decodable {
             makers: credits?.crew.filter { $0.job == "Director" }.map(\.name) ?? [],
             network: nil,
             cast: (credits?.cast ?? []).prefix(TMDBImages.castLimit).map {
-                TMDBCastMember(name: $0.name, character: $0.character.nonEmpty, profilePath: $0.profilePath)
-            })
+                TMDBCastMember(id: $0.id, name: $0.name, character: $0.character.nonEmpty, profilePath: $0.profilePath)
+            },
+            related: TMDBIDPage.merge(recommendations, similar))
     }
 }
 
@@ -122,6 +198,7 @@ struct TMDBShowDetails: Decodable {
     struct Credits: Decodable {
         struct Cast: Decodable {
             struct Role: Decodable { var character: String?; var episodeCount: Int? }
+            var id: Int?
             var name: String
             var profilePath: String?
             var roles: [Role]?
@@ -144,6 +221,8 @@ struct TMDBShowDetails: Decodable {
     var aggregateCredits: Credits?
     var contentRatings: Ratings?
     var images: TMDBImages?
+    var recommendations: TMDBIDPage?
+    var similar: TMDBIDPage?
 
     func details(region: String) -> TMDBDetails {
         let rating = { (code: String) in
@@ -161,9 +240,10 @@ struct TMDBShowDetails: Decodable {
             cast: (aggregateCredits?.cast ?? []).prefix(TMDBImages.castLimit).map { person in
                 // The biggest part first; a voice actor can have several.
                 let role = person.roles?.max { ($0.episodeCount ?? 0) < ($1.episodeCount ?? 0) }
-                return TMDBCastMember(name: person.name, character: role?.character.nonEmpty,
+                return TMDBCastMember(id: person.id, name: person.name, character: role?.character.nonEmpty,
                                       profilePath: person.profilePath, episodeCount: person.totalEpisodeCount)
-            })
+            },
+            related: TMDBIDPage.merge(recommendations, similar))
     }
 }
 
@@ -250,7 +330,7 @@ public struct TMDBClient: Sendable {
     /// the age rating, e.g. "DK"; the US one is used where it has none.
     public func movieDetails(id: Int, region: String) async throws -> TMDBDetails {
         let raw: TMDBMovieDetails = try await get("movie/\(id)", [
-            "append_to_response": "credits,release_dates,images",
+            "append_to_response": "credits,release_dates,images,recommendations,similar",
             "include_image_language": imageLanguages,
         ])
         return raw.details(region: region)
@@ -259,10 +339,15 @@ public struct TMDBClient: Sendable {
     /// The same for a show, with its cast across every season.
     public func showDetails(id: Int, region: String) async throws -> TMDBDetails {
         let raw: TMDBShowDetails = try await get("tv/\(id)", [
-            "append_to_response": "aggregate_credits,content_ratings,images",
+            "append_to_response": "aggregate_credits,content_ratings,images,recommendations,similar",
             "include_image_language": imageLanguages,
         ])
         return raw.details(region: region)
+    }
+
+    /// Someone's biography and the like, for the page of their titles.
+    public func person(id: Int) async throws -> TMDBPerson {
+        try await get("person/\(id)", [:])
     }
 
     /// Logos in the app's language, then English, then ones with no text.

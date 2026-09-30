@@ -84,6 +84,10 @@ final class AppSettings {
         return notes.isEmpty ? nil : "Address tidied: " + notes.joined(separator: ", ") + "."
     }
 
+    func libraryName(for id: UUID) -> String {
+        libraries.first { $0.id == id }?.name ?? "Your Library"
+    }
+
     var isConfigured: Bool { smbConfig.isComplete }
 
     func library(_ id: UUID) -> LibraryConfig? { libraries.first { $0.id == id } }

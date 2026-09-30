@@ -1,4 +1,5 @@
 import ReelCore
+import SwiftData
 import SwiftUI
 
 /// Pieces of the movie and show pages: a big backdrop with the title over
@@ -215,28 +216,57 @@ struct CastRow: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: layout.isRegular ? 20 : 14) {
                     ForEach(Array(cast.enumerated()), id: \.offset) { _, person in
-                        VStack(spacing: 6) {
-                            ArtworkFrame(ref: TMDBClient.imageURL(person.profilePath, size: "w185")?.absoluteString,
-                                         aspectRatio: 1, fallbackTitle: Self.initials(person.name),
-                                         fallbackSymbol: "person.fill", cornerRadius: size / 2)
-                                .frame(width: size)
-                            Text(person.name)
-                                .font(.caption.weight(.semibold))
-                                .lineLimit(2)
-                            if let character = person.character {
-                                Text(character)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                            }
+                        // Their other titles in the library, found by TMDB's ID for them.
+                        if person.id != nil {
+                            NavigationLink(value: person) { CastCard(person: person, size: size) }
+                                .buttonStyle(.plain)
+                        } else {
+                            CastCard(person: person, size: size)
                         }
-                        .multilineTextAlignment(.center)
-                        .frame(width: size + 16)
                     }
                 }
                 .padding(.horizontal, layout.gutter)
             }
         }
+    }
+
+}
+
+private struct CastCard: View {
+    let person: TMDBCastMember
+    let size: CGFloat
+
+    var body: some View {
+        VStack(spacing: 6) {
+            PersonPhoto(person: person)
+                .frame(width: size)
+            Text(person.name)
+                .font(.caption.weight(.semibold))
+                .lineLimit(2)
+            if let character = person.character {
+                Text(character)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .multilineTextAlignment(.center)
+        .frame(width: size + 16)
+    }
+}
+
+/// A round headshot, or their initials where TMDB has no photo.
+struct PersonPhoto: View {
+    let person: TMDBCastMember
+    var size = "w185"
+
+    var body: some View {
+        GeometryReader { geo in
+            ArtworkFrame(ref: TMDBClient.imageURL(person.profilePath, size: size)?.absoluteString,
+                         aspectRatio: 1, fallbackTitle: Self.initials(person.name),
+                         fallbackSymbol: "person.fill", cornerRadius: geo.size.width / 2)
+        }
+        .aspectRatio(1, contentMode: .fit)
     }
 
     private static func initials(_ name: String) -> String {
@@ -254,5 +284,66 @@ struct SectionTitle: View {
         Text(text)
             .font(.title3.bold())
             .padding(.horizontal, Sizing(sizeClass).gutter)
+    }
+}
+
+/// What a movie or show page needs of the other titles for More Like This.
+protocol LibraryTitle: AnyObject {
+    var persistentModelID: PersistentIdentifier { get }
+    var libraryID: UUID { get }
+    var tmdbID: Int? { get }
+    var detailsJSON: Data? { get }
+    var detailsFetchedAt: Date? { get }
+}
+
+extension Video: LibraryTitle {}
+extension Show: LibraryTitle {}
+
+/// Other titles from the library like this one: TMDB's recommendations
+/// first, then ones sharing its genres. With no TMDB details to go on
+/// (YouTube downloads), the rest of its own library instead.
+struct MoreLikeThisRow<Title: LibraryTitle, Card: View>: View {
+    let title: Title
+    /// Every movie, or every show, newest first.
+    let candidates: [Title]
+    let libraryName: String
+    @ViewBuilder let card: (Title) -> Card
+
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @State private var picks: [Title] = []
+    @State private var heading = "More Like This"
+
+    var body: some View {
+        Group {
+            if !picks.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    SectionTitle(heading)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(alignment: .top, spacing: 12) {
+                            ForEach(picks, id: \.persistentModelID) { pick in
+                                card(pick).frame(width: Sizing(sizeClass).posterWidth)
+                            }
+                        }
+                        .padding(.horizontal, Sizing(sizeClass).gutter)
+                    }
+                }
+            }
+        }
+        .task(id: "\(title.detailsFetchedAt?.timeIntervalSince1970 ?? 0)/\(candidates.count)") { await pick() }
+    }
+
+    private func pick() async {
+        let others = candidates.filter { $0.persistentModelID != title.persistentModelID }
+        guard let target = TMDBDetails(json: title.detailsJSON) else {
+            heading = "More in \(libraryName)"
+            picks = Array(others.filter { $0.libraryID == title.libraryID }.prefix(15))
+            return
+        }
+        let details = await decodeDetails(others.map(\.detailsJSON))
+        let ranked = MoreLikeThis.rank(for: target, candidates: zip(others, details).map {
+            MoreLikeThis.Candidate(tmdbID: $0.tmdbID, details: $1)
+        })
+        heading = "More Like This"
+        picks = ranked.map { others[$0] }
     }
 }
