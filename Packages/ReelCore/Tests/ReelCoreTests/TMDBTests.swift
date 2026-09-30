@@ -27,6 +27,56 @@ final class TMDBTests: XCTestCase {
         XCTAssertEqual(season.episodes.first?.stillPath, "/e1.jpg")
     }
 
+    func testDecodeMovieDetails() throws {
+        let json = """
+        {"id":603,"tagline":"Welcome to the Real World.","runtime":136,"vote_average":8.2,"vote_count":26000,
+         "genres":[{"id":28,"name":"Action"},{"id":878,"name":"Science Fiction"}],
+         "credits":{"cast":[{"name":"Keanu Reeves","character":"Neo","profile_path":"/k.jpg","order":0},
+                            {"name":"Laurence Fishburne","character":"","profile_path":null,"order":1}],
+                    "crew":[{"name":"Lana Wachowski","job":"Director"},{"name":"Bill Pope","job":"Director of Photography"}]},
+         "release_dates":{"results":[{"iso_3166_1":"US","release_dates":[{"certification":"","type":1},{"certification":"R","type":3}]},
+                                     {"iso_3166_1":"DK","release_dates":[{"certification":"15","type":3}]}]},
+         "images":{"logos":[{"file_path":"/logo.svg","iso_639_1":"en"},{"file_path":"/logo.png","iso_639_1":"en"}]}}
+        """
+        let raw = try TMDBClient.decoder.decode(TMDBMovieDetails.self, from: Data(json.utf8))
+        let details = raw.details(region: "DK")
+        XCTAssertEqual(details.tagline, "Welcome to the Real World.")
+        XCTAssertEqual(details.genres, ["Action", "Science Fiction"])
+        XCTAssertEqual(details.runtime, 136)
+        XCTAssertEqual(details.rating, 8.2)
+        XCTAssertEqual(details.certification, "15")
+        XCTAssertEqual(raw.details(region: "SE").certification, "R")
+        XCTAssertEqual(details.logoPath, "/logo.png")
+        XCTAssertEqual(details.makers, ["Lana Wachowski"])
+        XCTAssertEqual(details.cast.map(\.name), ["Keanu Reeves", "Laurence Fishburne"])
+        XCTAssertNil(details.cast[1].character)
+
+        // Round-trips as it's stored on the model.
+        let stored = try JSONDecoder().decode(TMDBDetails.self, from: JSONEncoder().encode(details))
+        XCTAssertEqual(stored, details)
+    }
+
+    func testDecodeShowDetails() throws {
+        let json = """
+        {"id":82728,"tagline":"","episode_run_time":[],"vote_average":8.9,"vote_count":5,
+         "genres":[{"id":16,"name":"Animation"}],"created_by":[{"name":"Joe Brumm"}],"networks":[{"name":"ABC Kids"}],
+         "aggregate_credits":{"cast":[{"name":"David McCormack","profile_path":"/d.jpg","total_episode_count":150,
+             "roles":[{"character":"Bandit (voice)","episode_count":148},{"character":"Rad (voice)","episode_count":2}]}]},
+         "content_ratings":{"results":[{"iso_3166_1":"US","rating":"TV-Y"}]},
+         "images":{"logos":[]}}
+        """
+        let details = try TMDBClient.decoder.decode(TMDBShowDetails.self, from: Data(json.utf8)).details(region: "DK")
+        XCTAssertNil(details.tagline)
+        XCTAssertNil(details.runtime)
+        XCTAssertNil(details.rating, "5 votes is too few to show")
+        XCTAssertEqual(details.certification, "TV-Y")
+        XCTAssertNil(details.logoPath)
+        XCTAssertEqual(details.makers, ["Joe Brumm"])
+        XCTAssertEqual(details.network, "ABC Kids")
+        XCTAssertEqual(details.cast.first?.character, "Bandit (voice)")
+        XCTAssertEqual(details.cast.first?.episodeCount, 150)
+    }
+
     func testMovieYearTolerance() throws {
         let results = [
             TMDBMovie(id: 1, title: "Moana", releaseDate: "2026-07-10", overview: nil, posterPath: nil, backdropPath: nil),

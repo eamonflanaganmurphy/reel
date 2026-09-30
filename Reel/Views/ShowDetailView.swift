@@ -1,3 +1,4 @@
+import ReelCore
 import SwiftUI
 
 struct ShowDetailView: View {
@@ -16,6 +17,7 @@ struct ShowDetailView: View {
 
 private struct ShowPage: View {
     @Bindable var show: Show
+    @Environment(AppSettings.self) private var settings
     @Environment(PlaybackCenter.self) private var playback
     @Environment(\.horizontalSizeClass) private var sizeClass
     /// Chosen when the page opens, then only by the user, so marking a
@@ -31,72 +33,67 @@ private struct ShowPage: View {
         let selectedSeason = season ?? Self.defaultSeason(next: next, seasons: seasons)
         let episodes = all.filter { $0.season == selectedSeason }
         let layout = Sizing(sizeClass)
+        let details = show.details
+        let backdrop = show.backdropRef ?? show.posterRef
+        let fallbacks = show.fallbackRefs
 
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                BackdropHeader(ref: show.backdropRef ?? show.posterRef, fallbackRefs: show.fallbackRefs,
-                               aspectRatio: layout.backdropAspect)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(show.title).font(.title.bold())
-                    HStack(spacing: 8) {
-                        if let year = show.year { Text(String(year)) }
-                        Text("\(seasons.filter { $0 != 0 }.count) seasons")
-                        Text("\(all.count) episodes")
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal)
-                .padding(.top, -40)
-
-                if let next {
-                    Button { playback.play(next) } label: {
-                        VStack(spacing: 2) {
-                            Label(next.isInProgress ? "Resume" : "Play", systemImage: "play.fill").font(.headline)
-                            Text("\(next.episodeCode) · \(next.title)").font(.caption).lineLimit(1)
+            VStack(alignment: .leading, spacing: 28) {
+                DetailHero(ref: backdrop, fallbackRefs: fallbacks) {
+                    TitleArt(title: show.title, logoPath: details?.logoPath)
+                    MetaLines(facts: facts(details, seasons: seasons, episodes: all.count),
+                              certification: details?.certification, rating: details?.rating, genres: details?.genres ?? [])
+                    if let next {
+                        Button { playback.play(next) } label: {
+                            PlayButtonLabel(title: next.isInProgress ? "Resume" : "Play",
+                                            detail: next.isMovie ? nil : "\(next.episodeCode) · \(next.title)")
                         }
-                        .frame(maxWidth: .infinity)
+                        .buttonStyle(.borderedProminent)
+                        .tint(.white)
+                        .controlSize(.large)
+                        .frame(maxWidth: layout.buttonsWidth)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .frame(maxWidth: layout.buttonsWidth)
-                    .padding(.horizontal)
                 }
 
-                if let overview = show.overview, !overview.isEmpty {
-                    Text(overview).font(.subheadline).lineLimit(5)
-                        .frame(maxWidth: layout.readableWidth, alignment: .leading)
-                        .padding(.horizontal)
-                }
+                AboutSection(tagline: details?.tagline, overview: show.overview, credits: credits(details))
 
-                if seasons.count > 1 {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack {
-                            ForEach(seasons, id: \.self) { s in
-                                Button(s == 0 ? "Specials" : "Season \(s)") { season = s }
-                                    .buttonStyle(.bordered)
-                                    .tint(s == selectedSeason ? .accentColor : .secondary)
+                VStack(alignment: .leading, spacing: 14) {
+                    if seasons.count > 1 {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(seasons, id: \.self) { s in
+                                    SeasonChip(title: s == 0 ? "Specials" : "Season \(s)", selected: s == selectedSeason) {
+                                        withAnimation(.easeInOut(duration: 0.2)) { season = s }
+                                    }
+                                }
                             }
+                            .padding(.horizontal, layout.gutter)
                         }
-                        .padding(.horizontal)
+                    } else {
+                        SectionTitle("Episodes")
                     }
+
+                    LazyVGrid(columns: layout.episodeColumns, spacing: 12) {
+                        ForEach(episodes) { episode in
+                            EpisodeRow(episode: episode, thumbWidth: layout.episodeThumbWidth)
+                        }
+                    }
+                    .padding(.horizontal, layout.gutter)
                 }
 
-                LazyVGrid(columns: layout.episodeColumns, spacing: 14) {
-                    ForEach(episodes) { episode in
-                        EpisodeRow(episode: episode, thumbWidth: layout.episodeThumbWidth)
-                    }
+                if let cast = details?.cast, !cast.isEmpty {
+                    CastRow(cast: cast)
                 }
-                .padding(.horizontal)
             }
-            .padding(.bottom, 24)
+            .padding(.bottom, 32)
         }
+        .background { AmbientBackground(ref: backdrop, fallbackRefs: fallbacks, fallbackTitle: show.title) }
         .ignoresSafeArea(edges: .top)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             if season == nil { season = selectedSeason }
         }
+        .task { await DetailsLoader.load(show, settings: settings) }
         .toolbar {
             Menu {
                 Button {
@@ -111,8 +108,47 @@ private struct ShowPage: View {
         }
     }
 
+    private func facts(_ details: TMDBDetails?, seasons: [Int], episodes: Int) -> [String] {
+        var facts: [String] = []
+        if let year = show.year { facts.append(String(year)) }
+        let real = seasons.filter { $0 != 0 }.count
+        if real > 1 {
+            facts.append("\(real) seasons")
+        } else {
+            facts.append(episodes == 1 ? "1 episode" : "\(episodes) episodes")
+        }
+        if let minutes = details?.runtime { facts.append("\(minutes) min") }
+        return facts
+    }
+
+    private func credits(_ details: TMDBDetails?) -> [(label: String, value: String)] {
+        var credits: [(label: String, value: String)] = []
+        if let makers = details?.makers, !makers.isEmpty { credits.append(("Created by", makers.joined(separator: ", "))) }
+        if let network = details?.network { credits.append(("Network", network)) }
+        return credits
+    }
+
     private static func defaultSeason(next: Video?, seasons: [Int]) -> Int {
         next?.season ?? seasons.first ?? 1
+    }
+}
+
+private struct SeasonChip: View {
+    let title: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .foregroundStyle(selected ? Color.black : Color.primary)
+                .background(selected ? Color.white : Color.white.opacity(0.12), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -150,7 +186,9 @@ struct EpisodeRow: View {
                 }
                 Spacer(minLength: 0)
             }
-            .contentShape(Rectangle())
+            .padding(10)
+            .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
         .contextMenu {

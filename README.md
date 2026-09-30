@@ -9,7 +9,9 @@ TMDB, and plays the files with VLC. Nothing is transcoded.
 - **Watch progress on the share:** where you got to in each video is kept in a hidden `.reel/progress` folder on
   the share, so every phone running Reel (or a reinstall) resumes in the same place and shows the same Keep Watching.
   Each install writes its own file and the newest entry wins, so the SMB login needs write access.
-- **Detail pages:** movie and show pages with seasons, episode stills and descriptions
+- **Detail pages:** movie and show pages with a full-width backdrop fading into a page tinted by the artwork, the title
+  logo, genres, age and TMDB ratings, cast with photos, directors or creators, seasons, episode stills and descriptions.
+  The cast and the rest come from TMDB the first time a page opens and are kept, so they show offline too.
 - **Thumbnails:** anything without a TMDB poster or episode still shows a frame from the video itself. Frames are
   taken one at a time, wait while a scan or playback is running, and are cached, so each file is only read once.
   A show tries an episode still, then frames from its first three episodes; an episode with no readable frame uses the

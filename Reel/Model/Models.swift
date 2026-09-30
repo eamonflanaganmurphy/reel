@@ -20,6 +20,9 @@ final class Show {
     /// When the newest episode arrived, for "Recently Added".
     var updatedAt: Date
     @Relationship(deleteRule: .cascade, inverse: \Video.show) var episodes: [Video] = []
+    /// JSON-encoded TMDBDetails: cast, genres and the like. See `DetailsLoader`.
+    var detailsJSON: Data?
+    var detailsFetchedAt: Date?
 
     init(path: String, libraryID: UUID, title: String, addedAt: Date) {
         self.path = path
@@ -28,6 +31,8 @@ final class Show {
         self.addedAt = addedAt
         self.updatedAt = addedAt
     }
+
+    var details: TMDBDetails? { TMDBDetails(json: detailsJSON) }
 
     var sortedEpisodes: [Video] {
         episodes.sorted {
@@ -99,6 +104,9 @@ final class Video {
     /// JSON-encoded [SubtitleFile]. Stored as Data rather than a Codable
     /// array, which SwiftData has been unreliable with.
     var subtitlesJSON: Data?
+    /// A movie's JSON-encoded TMDBDetails. See `DetailsLoader`.
+    var detailsJSON: Data?
+    var detailsFetchedAt: Date?
     var fileSize: Int64 = 0
     var addedAt: Date
 
@@ -124,6 +132,8 @@ final class Video {
         get { subtitlesJSON.flatMap { try? JSONDecoder().decode([SubtitleFile].self, from: $0) } ?? [] }
         set { subtitlesJSON = try? JSONEncoder().encode(newValue) }
     }
+
+    var details: TMDBDetails? { TMDBDetails(json: detailsJSON) }
 
     var fileName: String { (path as NSString).lastPathComponent }
 
@@ -208,4 +218,11 @@ final class Video {
 extension Notification.Name {
     /// Posted when a video's position or watched state changes on this device.
     static let watchProgressChanged = Notification.Name("watchProgressChanged")
+}
+
+extension TMDBDetails {
+    init?(json: Data?) {
+        guard let json, let decoded = try? JSONDecoder().decode(TMDBDetails.self, from: json) else { return nil }
+        self = decoded
+    }
 }

@@ -42,6 +42,155 @@ public struct TMDBSeason: Decodable, Sendable, Equatable {
     public var episodes: [TMDBEpisode]
 }
 
+/// What a movie or show page shows beyond the scan's basics. Kept as JSON on
+/// the model, so it's encoded with plain keys rather than TMDB's.
+public struct TMDBDetails: Codable, Sendable, Equatable {
+    public var tagline: String?
+    public var genres: [String] = []
+    /// Minutes; a typical episode's for a show.
+    public var runtime: Int?
+    /// Out of 10, nil when too few people have rated it to mean much.
+    public var rating: Double?
+    /// "PG", "TV-Y", "12", for the region asked for.
+    public var certification: String?
+    /// The title as artwork, a transparent PNG.
+    public var logoPath: String?
+    /// Directors of a movie, creators of a show.
+    public var makers: [String] = []
+    public var network: String?
+    public var cast: [TMDBCastMember] = []
+}
+
+public struct TMDBCastMember: Codable, Sendable, Equatable, Hashable {
+    public var name: String
+    public var character: String?
+    public var profilePath: String?
+    /// Episodes they're in, for a show.
+    public var episodeCount: Int?
+}
+
+/// `movie/{id}` with credits, release dates and images appended.
+struct TMDBMovieDetails: Decodable {
+    struct Named: Decodable { var name: String }
+    struct Credits: Decodable {
+        struct Cast: Decodable { var name: String; var character: String?; var profilePath: String? }
+        struct Crew: Decodable { var name: String; var job: String? }
+        var cast: [Cast]
+        var crew: [Crew]
+    }
+    struct ReleaseDates: Decodable {
+        struct Country: Decodable {
+            struct Release: Decodable { var certification: String? }
+            var iso31661: String
+            var releaseDates: [Release]
+        }
+        var results: [Country]
+    }
+
+    var tagline: String?
+    var genres: [Named]?
+    var runtime: Int?
+    var voteAverage: Double?
+    var voteCount: Int?
+    var credits: Credits?
+    var releaseDates: ReleaseDates?
+    var images: TMDBImages?
+
+    func details(region: String) -> TMDBDetails {
+        let certifications = { (code: String) in
+            releaseDates?.results.first { $0.iso31661 == code }?.releaseDates
+                .compactMap(\.certification).first { !$0.isEmpty }
+        }
+        return TMDBDetails(
+            tagline: tagline.nonEmpty,
+            genres: genres?.map(\.name) ?? [],
+            runtime: runtime.flatMap { $0 > 0 ? $0 : nil },
+            rating: TMDBImages.rating(voteAverage, count: voteCount),
+            certification: certifications(region) ?? certifications("US"),
+            logoPath: images?.bestLogo,
+            makers: credits?.crew.filter { $0.job == "Director" }.map(\.name) ?? [],
+            network: nil,
+            cast: (credits?.cast ?? []).prefix(TMDBImages.castLimit).map {
+                TMDBCastMember(name: $0.name, character: $0.character.nonEmpty, profilePath: $0.profilePath)
+            })
+    }
+}
+
+/// `tv/{id}` with aggregate credits, content ratings and images appended.
+struct TMDBShowDetails: Decodable {
+    struct Named: Decodable { var name: String }
+    struct Credits: Decodable {
+        struct Cast: Decodable {
+            struct Role: Decodable { var character: String?; var episodeCount: Int? }
+            var name: String
+            var profilePath: String?
+            var roles: [Role]?
+            var totalEpisodeCount: Int?
+        }
+        var cast: [Cast]
+    }
+    struct Ratings: Decodable {
+        struct Country: Decodable { var iso31661: String; var rating: String? }
+        var results: [Country]
+    }
+
+    var tagline: String?
+    var genres: [Named]?
+    var episodeRunTime: [Int]?
+    var voteAverage: Double?
+    var voteCount: Int?
+    var createdBy: [Named]?
+    var networks: [Named]?
+    var aggregateCredits: Credits?
+    var contentRatings: Ratings?
+    var images: TMDBImages?
+
+    func details(region: String) -> TMDBDetails {
+        let rating = { (code: String) in
+            contentRatings?.results.first { $0.iso31661 == code }?.rating.nonEmpty
+        }
+        return TMDBDetails(
+            tagline: tagline.nonEmpty,
+            genres: genres?.map(\.name) ?? [],
+            runtime: episodeRunTime?.first { $0 > 0 },
+            rating: TMDBImages.rating(voteAverage, count: voteCount),
+            certification: rating(region) ?? rating("US"),
+            logoPath: images?.bestLogo,
+            makers: createdBy?.map(\.name) ?? [],
+            network: networks?.first?.name,
+            cast: (aggregateCredits?.cast ?? []).prefix(TMDBImages.castLimit).map { person in
+                // The biggest part first; a voice actor can have several.
+                let role = person.roles?.max { ($0.episodeCount ?? 0) < ($1.episodeCount ?? 0) }
+                return TMDBCastMember(name: person.name, character: role?.character.nonEmpty,
+                                      profilePath: person.profilePath, episodeCount: person.totalEpisodeCount)
+            })
+    }
+}
+
+struct TMDBImages: Decodable {
+    struct Image: Decodable { var filePath: String; var iso6391: String? }
+    var logos: [Image]?
+
+    static let castLimit = 20
+
+    /// TMDB lists the most voted first. SVGs aren't something UIImage reads.
+    var bestLogo: String? {
+        logos?.first { $0.filePath.hasSuffix(".png") }?.filePath
+    }
+
+    static func rating(_ average: Double?, count: Int?) -> Double? {
+        guard let average, average > 0, (count ?? 0) >= 20 else { return nil }
+        return average
+    }
+}
+
+private extension Optional where Wrapped == String {
+    var nonEmpty: String? {
+        guard let self, !self.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return self
+    }
+}
+
 struct TMDBPage<T: Decodable>: Decodable {
     var results: [T]
 }
@@ -95,6 +244,32 @@ public struct TMDBClient: Sendable {
 
     public func season(showID: Int, number: Int) async throws -> TMDBSeason {
         try await get("tv/\(showID)/season/\(number)", [:])
+    }
+
+    /// Cast, genres, ratings and a title logo for a movie. `region` picks
+    /// the age rating, e.g. "DK"; the US one is used where it has none.
+    public func movieDetails(id: Int, region: String) async throws -> TMDBDetails {
+        let raw: TMDBMovieDetails = try await get("movie/\(id)", [
+            "append_to_response": "credits,release_dates,images",
+            "include_image_language": imageLanguages,
+        ])
+        return raw.details(region: region)
+    }
+
+    /// The same for a show, with its cast across every season.
+    public func showDetails(id: Int, region: String) async throws -> TMDBDetails {
+        let raw: TMDBShowDetails = try await get("tv/\(id)", [
+            "append_to_response": "aggregate_credits,content_ratings,images",
+            "include_image_language": imageLanguages,
+        ])
+        return raw.details(region: region)
+    }
+
+    /// Logos in the app's language, then English, then ones with no text.
+    private var imageLanguages: String {
+        var languages = [String(language.prefix(2))]
+        for fallback in ["en", "null"] where !languages.contains(fallback) { languages.append(fallback) }
+        return languages.joined(separator: ",")
     }
 
     static func bestMovie(_ results: [TMDBMovie], title: String, year: Int?) -> TMDBMovie? {

@@ -195,6 +195,7 @@ final class LibrarySync {
         for (i, movie) in movies.enumerated() {
             state = .scanning("Fetching movie info \(i + 1) of \(movies.count)…")
             if let hit = try await client.searchMovie(title: movie.title, year: movie.year) {
+                if movie.tmdbID != hit.id { movie.detailsJSON = nil; movie.detailsFetchedAt = nil }
                 movie.tmdbID = hit.id
                 movie.title = hit.title
                 movie.year = hit.year ?? movie.year
@@ -213,6 +214,7 @@ final class LibrarySync {
             state = .scanning("Fetching TV info \(i + 1) of \(shows.count)…")
             if !show.metadataFetched {
                 if let hit = try await client.searchShow(title: show.title, year: show.year, country: show.country) {
+                    if show.tmdbID != hit.id { show.detailsJSON = nil; show.detailsFetchedAt = nil }
                     show.tmdbID = hit.id
                     show.overview = hit.overview
                     show.posterRef = TMDBClient.imageURL(hit.posterPath)?.absoluteString ?? show.posterRef

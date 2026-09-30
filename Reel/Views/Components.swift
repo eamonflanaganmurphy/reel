@@ -118,22 +118,6 @@ struct ShelfRow<Item: Identifiable, Card: View>: View {
     }
 }
 
-/// Backdrop that fades into the background, for detail pages.
-struct BackdropHeader: View {
-    let ref: String?
-    var fallbackRefs: [String?] = []
-    var fallbackTitle: String?
-    var aspectRatio: CGFloat = 16.0 / 9.0
-
-    var body: some View {
-        ArtworkFrame(ref: ref, fallbackRefs: fallbackRefs, aspectRatio: aspectRatio, fallbackTitle: nil, fallbackSymbol: "photo", cornerRadius: 0)
-            .overlay {
-                LinearGradient(colors: [.clear, .clear, Color(uiColor: .systemBackground)],
-                               startPoint: .top, endPoint: .bottom)
-            }
-    }
-}
-
 /// Sizes for the width the app has. A regular-width window (an iPad, or
 /// a big iPhone on its side) gets bigger posters, wider-cropped backdrops
 /// and text kept to a readable line length.
@@ -149,14 +133,16 @@ struct Sizing {
     var gridColumns: [GridItem] {
         [GridItem(.adaptive(minimum: isRegular ? 150 : 104, maximum: isRegular ? 210 : 160), spacing: isRegular ? 20 : 14, alignment: .top)]
     }
-    var detailPosterWidth: CGFloat { isRegular ? 170 : 110 }
     var episodeThumbWidth: CGFloat { isRegular ? 220 : 150 }
     /// Episodes sit two or three abreast on an iPad rather than in one long column.
     var episodeColumns: [GridItem] {
         isRegular ? [GridItem(.adaptive(minimum: 440), spacing: 24, alignment: .top)] : [GridItem(.flexible())]
     }
-    /// A 16:9 backdrop across a whole iPad fills most of the screen.
-    var backdropAspect: CGFloat { isRegular ? 2.4 : 16.0 / 9.0 }
+    /// The movie and show pages' backdrop: nearly square on a phone, so the
+    /// title and buttons fit over it.
+    var heroAspect: CGFloat { isRegular ? 1.9 : 1.0 }
+    /// Side margin on the movie and show pages.
+    var gutter: CGFloat { isRegular ? 32 : 16 }
     var readableWidth: CGFloat { isRegular ? 720 : .infinity }
     var buttonsWidth: CGFloat { isRegular ? 520 : .infinity }
 }

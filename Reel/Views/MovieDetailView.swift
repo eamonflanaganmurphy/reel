@@ -1,3 +1,4 @@
+import ReelCore
 import SwiftUI
 
 struct MovieDetailView: View {
@@ -16,51 +17,40 @@ struct MovieDetailView: View {
 
 private struct MoviePage: View {
     @Bindable var video: Video
+    @Environment(AppSettings.self) private var settings
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
         let layout = Sizing(sizeClass)
+        let details = video.details
+        let backdrop = video.backdropRef ?? video.posterRef
+
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                BackdropHeader(ref: video.backdropRef ?? video.posterRef, fallbackRefs: [video.frameRef],
-                               aspectRatio: layout.backdropAspect)
-
-                HStack(alignment: .bottom, spacing: 16) {
-                    ArtworkFrame(ref: video.posterRef, fallbackRefs: [video.frameRef], fallbackTitle: video.title)
-                        .frame(width: layout.detailPosterWidth)
-                        .shadow(radius: 8)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(video.displayTitle).font(.title2.bold())
-                        HStack(spacing: 8) {
-                            if let year = video.year { Text(String(year)) }
-                            if video.durationSeconds > 0 { Text(formatDuration(seconds: video.durationSeconds)) }
-                            if video.watched { Label("Watched", systemImage: "checkmark.circle.fill").labelStyle(.titleAndIcon) }
-                        }
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    }
+            VStack(alignment: .leading, spacing: 28) {
+                DetailHero(ref: backdrop, fallbackRefs: [video.frameRef]) {
+                    TitleArt(title: video.displayTitle, logoPath: details?.logoPath)
+                    MetaLines(facts: facts(details), certification: details?.certification, rating: details?.rating,
+                              genres: details?.genres ?? [], watched: video.watched)
+                    PlayButtons(video: video)
+                        .frame(maxWidth: layout.buttonsWidth)
                 }
-                .padding(.horizontal)
-                .padding(.top, -60)
 
-                PlayButtons(video: video)
-                    .frame(maxWidth: layout.buttonsWidth)
-                    .padding(.horizontal)
+                AboutSection(tagline: details?.tagline, overview: video.overview, credits: credits(details))
 
-                if let overview = video.overview, !overview.isEmpty {
-                    Text(overview).font(.body)
-                        .frame(maxWidth: layout.readableWidth, alignment: .leading)
-                        .padding(.horizontal)
+                if let cast = details?.cast, !cast.isEmpty {
+                    CastRow(cast: cast)
                 }
 
                 FileInfo(video: video)
                     .frame(maxWidth: layout.readableWidth, alignment: .leading)
-                    .padding(.horizontal)
+                    .padding(.horizontal, layout.gutter)
             }
-            .padding(.bottom, 24)
+            .padding(.bottom, 32)
         }
+        .background { AmbientBackground(ref: backdrop, fallbackRefs: [video.frameRef], fallbackTitle: video.title) }
         .ignoresSafeArea(edges: .top)
         .navigationBarTitleDisplayMode(.inline)
+        .task { await DetailsLoader.load(video, settings: settings) }
         .toolbar {
             Menu {
                 Button { video.setWatched(!video.watched) } label: {
@@ -71,6 +61,22 @@ private struct MoviePage: View {
                 Image(systemName: "ellipsis.circle")
             }
         }
+    }
+
+    private func facts(_ details: TMDBDetails?) -> [String] {
+        var facts: [String] = []
+        if let year = video.year { facts.append(String(year)) }
+        if let minutes = details?.runtime {
+            facts.append(formatDuration(seconds: Double(minutes) * 60))
+        } else if video.durationSeconds > 0 {
+            facts.append(formatDuration(seconds: video.durationSeconds))
+        }
+        return facts
+    }
+
+    private func credits(_ details: TMDBDetails?) -> [(label: String, value: String)] {
+        guard let makers = details?.makers, !makers.isEmpty else { return [] }
+        return [(makers.count > 1 ? "Directors" : "Director", makers.joined(separator: ", "))]
     }
 }
 
@@ -84,22 +90,21 @@ struct PlayButtons: View {
         HStack(spacing: 12) {
             if video.isInProgress {
                 Button { playback.play(video) } label: {
-                    Label("Resume \(PlayerScreen.format(video.positionSeconds))", systemImage: "play.fill")
-                        .frame(maxWidth: .infinity)
+                    PlayButtonLabel(title: "Resume \(PlayerScreen.format(video.positionSeconds))")
                 }
                 .buttonStyle(.borderedProminent)
                 Button { playback.play(video, from: 0) } label: {
                     Label("Start Over", systemImage: "arrow.counterclockwise")
+                        .font(.headline)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
             } else {
-                Button { playback.play(video, from: 0) } label: {
-                    Label("Play", systemImage: "play.fill").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
+                Button { playback.play(video, from: 0) } label: { PlayButtonLabel(title: "Play") }
+                    .buttonStyle(.borderedProminent)
             }
         }
+        .tint(.white)
         .controlSize(.large)
     }
 }
