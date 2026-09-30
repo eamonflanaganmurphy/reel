@@ -317,7 +317,8 @@ struct GeneratedArtwork: View {
 }
 
 /// A fixed-aspect frame that crops artwork to fit. `.scaledToFill` alone
-/// overflows its frame in a grid.
+/// overflows its frame in a grid, and clipping only hides the overflow: it
+/// still takes taps meant for the cards either side, hence the content shape.
 struct ArtworkFrame: View {
     let ref: String?
     var fallbackRefs: [String?] = []
@@ -335,5 +336,6 @@ struct ArtworkFrame: View {
                              fallbackSubtitle: fallbackSubtitle, fallbackSymbol: fallbackSymbol)
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }

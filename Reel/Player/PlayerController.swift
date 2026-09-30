@@ -270,12 +270,86 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
 }
 
 extension VLCMediaPlayer {
-    /// VLCKit 3's `stop` waits for VLC's input thread to finish, which can
-    /// take as long as an SMB read takes to time out. Off the main thread, a
-    /// stalled share can't freeze the app. One queue, so stops never overlap.
+    /// Stops the player for good and lets it go, never on the main thread.
+    ///
+    /// VLCKit 3's `stop` only asks VLC to stop (libvlc_media_player_stop_async):
+    /// the file is closed on a thread of VLC's, which on a stalled share takes as
+    /// long as an SMB read takes to time out. Freeing the player waits for that
+    /// thread, and the video output it's closing waits for the main thread, so
+    /// a player freed on the main thread meanwhile deadlocks the app until iOS
+    /// kills it. VLCKit's own callbacks to the main thread hold the player too
+    /// and could be the last to let go, so it's kept here until VLC says it has
+    /// stopped and those callbacks have run, then released on a background queue.
     func stopInBackground() {
-        VLCMediaPlayer.stopQueue.async { self.stop() }
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { RetiredPlayer.retire(self) }
+        } else {
+            DispatchQueue.main.async { RetiredPlayer.retire(self) }
+        }
+    }
+}
+
+/// Holds a stopped player until VLC has finished with it. See `stopInBackground`.
+@MainActor
+private final class RetiredPlayer: NSObject, VLCMediaPlayerDelegate, @unchecked Sendable {
+    private static var all: [ObjectIdentifier: RetiredPlayer] = [:]
+
+    private let id: ObjectIdentifier
+    private var player: VLCMediaPlayer?
+    private var drawable: Any?
+
+    private init(_ player: VLCMediaPlayer) {
+        id = ObjectIdentifier(player)
+        self.player = player
+        drawable = player.drawable
     }
 
-    private static let stopQueue = DispatchQueue(label: "Reel.VLCStop", qos: .userInitiated)
+    static func retire(_ player: VLCMediaPlayer) {
+        let id = ObjectIdentifier(player)
+        guard all[id] == nil else { return }
+        let retired = RetiredPlayer(player)
+        all[id] = retired
+        player.delegate = retired
+        player.stop()
+        // One that never reports stopping, e.g. it had already ended. VLC is
+        // long done with it by then.
+        Task {
+            try? await Task.sleep(for: .seconds(60))
+            retired.release()
+        }
+    }
+
+    nonisolated func mediaPlayerStateChanged(_ aNotification: Notification) {
+        MainActor.assumeIsolated {
+            guard let state = player?.state, state == .stopped || state == .error else { return }
+            release()
+        }
+    }
+
+    private func release() {
+        guard Self.all.removeValue(forKey: id) != nil, let player else { return }
+        player.delegate = nil
+        self.player = nil
+        let drawable = drawable
+        self.drawable = nil
+        let box = Box(player: player, drawable: drawable)
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) {
+            // Lets every callback VLCKit queued for the main thread run first,
+            // so this is normally the last reference.
+            DispatchQueue.main.sync {}
+            box.player = nil
+            // A view is only freed on the main thread.
+            DispatchQueue.main.async { box.drawable = nil }
+        }
+    }
+
+    private final class Box: @unchecked Sendable {
+        var player: VLCMediaPlayer?
+        var drawable: Any?
+
+        init(player: VLCMediaPlayer, drawable: Any?) {
+            self.player = player
+            self.drawable = drawable
+        }
+    }
 }
