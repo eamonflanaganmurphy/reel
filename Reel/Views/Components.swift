@@ -69,6 +69,33 @@ struct WatchedBadge: View {
     }
 }
 
+/// Videos started and not finished, most recently played first. On Home for
+/// every library, and atop each library for its own. Tapping one resumes it.
+struct KeepWatchingShelf: View {
+    let videos: [Video]
+
+    @Environment(PlaybackCenter.self) private var playback
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    var body: some View {
+        if !videos.isEmpty {
+            ShelfRow(title: "Keep Watching", items: videos, cardWidth: Sizing(sizeClass).wideCardWidth) { video in
+                Button { playback.play(video) } label: { WideCard(video: video) }
+                    .buttonStyle(.plain)
+                    .contextMenu { menu(video) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func menu(_ video: Video) -> some View {
+        Button { video.setWatched(true) } label: { Label("Mark as Watched", systemImage: "checkmark.circle") }
+        // Clears the position, which takes it off Keep Watching.
+        Button { video.setWatched(false) } label: { Label("Mark as Unwatched", systemImage: "circle") }
+        Button { playback.play(video, from: 0) } label: { Label("Play from Beginning", systemImage: "arrow.counterclockwise") }
+    }
+}
+
 /// Horizontally scrolling titled row, as on Home.
 struct ShelfRow<Item: Identifiable, Card: View>: View {
     let title: String

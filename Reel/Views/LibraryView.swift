@@ -12,6 +12,7 @@ struct LibraryView: View {
 
     @Query private var movies: [Video]
     @Query private var shows: [Show]
+    @Query private var inProgress: [Video]
     @State private var search = ""
     @State private var sort = SortOrder.title
 
@@ -26,10 +27,17 @@ struct LibraryView: View {
         let id = library.id
         _movies = Query(filter: #Predicate<Video> { $0.libraryID == id && $0.isMovie }, sort: \Video.title)
         _shows = Query(filter: #Predicate<Show> { $0.libraryID == id }, sort: \Show.title)
+        _inProgress = Query(filter: #Predicate<Video> { $0.libraryID == id && $0.positionSeconds > 30 && !$0.watched },
+                            sort: \Video.lastPlayedAt, order: .reverse)
     }
 
     var body: some View {
         ScrollView {
+            // Hidden while searching, which is for finding something new.
+            if search.isEmpty {
+                KeepWatchingShelf(videos: inProgress).padding(.top)
+            }
+
             LazyVGrid(columns: Sizing(sizeClass).gridColumns, spacing: 18) {
                 if library.kind == .movies {
                     ForEach(sortedMovies) { movie in

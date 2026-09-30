@@ -6,7 +6,6 @@ struct HomeView: View {
 
     @Environment(AppSettings.self) private var settings
     @Environment(LibrarySync.self) private var sync
-    @Environment(PlaybackCenter.self) private var playback
     @Environment(\.modelContext) private var context
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -27,13 +26,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 28) {
                 statusBanner
 
-                if !inProgress.isEmpty {
-                    ShelfRow(title: "Keep Watching", items: inProgress, cardWidth: layout.wideCardWidth) { video in
-                        Button { playback.play(video) } label: { WideCard(video: video) }
-                            .buttonStyle(.plain)
-                            .contextMenu { keepWatchingMenu(video) }
-                    }
-                }
+                KeepWatchingShelf(videos: inProgress)
 
                 ForEach(settings.libraries) { library in
                     libraryShelf(library)
@@ -119,13 +112,5 @@ struct HomeView: View {
         .frame(maxWidth: .infinity)
         .padding(.top, 80)
         .padding(.horizontal, 32)
-    }
-
-    @ViewBuilder
-    private func keepWatchingMenu(_ video: Video) -> some View {
-        Button { video.setWatched(true) } label: { Label("Mark as Watched", systemImage: "checkmark.circle") }
-        // Clears the position, which takes it off Keep Watching.
-        Button { video.setWatched(false) } label: { Label("Mark as Unwatched", systemImage: "circle") }
-        Button { playback.play(video, from: 0) } label: { Label("Play from Beginning", systemImage: "arrow.counterclockwise") }
     }
 }
