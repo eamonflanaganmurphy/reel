@@ -99,8 +99,15 @@ final class AppSettings {
         username = defaults.string(forKey: "username") ?? ""
         password = Keychain.get("smb-password") ?? ""
         tmdbKey = defaults.string(forKey: "tmdbKey") ?? ""
-        let libraries = defaults.data(forKey: "libraries")
-            .flatMap { try? JSONDecoder().decode([LibraryConfig].self, from: $0) } ?? LibraryConfig.defaults
+        // The starting libraries are saved at once too: their IDs are made
+        // fresh each launch, and titles and collection filters point at them.
+        let libraries: [LibraryConfig]
+        if let saved = defaults.data(forKey: "libraries").flatMap({ try? JSONDecoder().decode([LibraryConfig].self, from: $0) }) {
+            libraries = saved
+        } else {
+            libraries = LibraryConfig.defaults
+            defaults.set(try? JSONEncoder().encode(libraries), forKey: "libraries")
+        }
         self.libraries = libraries
         framesOnShare = defaults.object(forKey: "framesOnShare") as? Bool ?? true
         // A kids collection to start with, saved at once so its ID (the
