@@ -7,6 +7,10 @@ TMDB, and plays the files with VLC. Nothing is transcoded. It can use a WebDAV
 server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve webdav`.
 
 - **Library:** Home (Keep Watching, Recently Added), plus a poster grid per library with its own Keep Watching row
+- **Collections:** tabs that gather movies and shows from any library by filters: age rating, genre (or not in a
+  genre), library, year, TMDB rating and length, matching any or all of them. A **Kids & Family** collection is there to
+  start with. The ••• menu on a movie or show page adds it to or removes it from a collection by hand, whatever the
+  filters say. Collections are set up in Settings or from the filter button on their tab, and are kept on this device.
 - **Watch progress on the share:** where you got to in each video is kept in a hidden `.reel/progress` folder on
   the share, so every phone running Reel (or a reinstall) resumes in the same place and shows the same Keep Watching.
   Each install writes its own file and the newest entry wins, so the SMB login needs write access.

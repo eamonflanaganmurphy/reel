@@ -68,6 +68,7 @@ private struct MoviePage: View {
                     Label(video.watched ? "Mark as Unwatched" : "Mark as Watched",
                           systemImage: video.watched ? "circle" : "checkmark.circle")
                 }
+                CollectionMenuItems(path: video.path, candidate: video.collectionCandidate(details: details))
             } label: {
                 Image(systemName: "ellipsis.circle")
             }

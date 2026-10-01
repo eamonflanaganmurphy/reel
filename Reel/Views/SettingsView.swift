@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var testing = false
     @State private var shares: [String] = []
     @State private var editing: LibraryConfig?
+    @State private var editingCollection: CollectionConfig?
     @State private var browser = ServerBrowser()
     @State private var resolving: String?
     /// Library folders found somewhere else in the share, offered as a fix.
@@ -155,6 +156,31 @@ struct SettingsView: View {
             }
 
             Section {
+                ForEach(settings.collections) { collection in
+                    Button { editingCollection = collection } label: {
+                        HStack {
+                            Label(collection.name, systemImage: "square.stack")
+                            Spacer()
+                            Text(Self.filterCount(collection.rules.filters.count))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .foregroundStyle(.primary)
+                }
+                .onDelete { settings.collections.remove(atOffsets: $0) }
+                Menu {
+                    Button("Kids & Family") { editingCollection = .kidsAndFamily(libraries: settings.libraries) }
+                    Button("Empty Collection") { editingCollection = CollectionConfig(name: "", rules: CollectionRules()) }
+                } label: {
+                    Label("Add Collection", systemImage: "plus")
+                }
+            } header: {
+                Text("Collections")
+            } footer: {
+                Text("A collection gathers movies and shows from any library into a tab of its own, by filters such as age rating and genre. Add or remove a title by hand from the ••• menu on its page.")
+            }
+
+            Section {
                 SecureField("API key or read access token", text: $settings.tmdbKey)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
@@ -234,6 +260,9 @@ struct SettingsView: View {
         }
         .onAppear { browser.start() }
         .onDisappear { browser.stop() }
+        .sheet(item: $editingCollection) { collection in
+            CollectionEditor(collection: collection, onSave: settings.save)
+        }
         .sheet(item: $editing) { library in
             LibraryEditor(library: library) { saved in
                 if let i = settings.libraries.firstIndex(where: { $0.id == saved.id }) {
@@ -243,6 +272,10 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private static func filterCount(_ n: Int) -> String {
+        n == 0 ? "By hand" : n == 1 ? "1 filter" : "\(n) filters"
     }
 
     @ViewBuilder

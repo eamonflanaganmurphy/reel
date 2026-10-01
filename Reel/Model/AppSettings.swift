@@ -25,6 +25,44 @@ struct LibraryConfig: Codable, Hashable, Identifiable {
     ]
 }
 
+/// Titles from any library gathered in a tab of their own: whatever its
+/// filters match, plus titles added by hand, less any taken out by hand.
+struct CollectionConfig: Codable, Hashable, Identifiable {
+    var id = UUID()
+    var name: String
+    var rules: CollectionRules
+    /// Share paths of movies (`Video.path`) and shows (`Show.path`) put in by
+    /// hand, whatever the filters say.
+    var added: Set<String> = []
+    /// Share paths taken out by hand, whatever the filters say.
+    var removed: Set<String> = []
+
+    func contains(path: String, candidate: CollectionCandidate) -> Bool {
+        !removed.contains(path) && (added.contains(path) || rules.matches(candidate))
+    }
+
+    /// Puts a title in or takes it out by hand. Remembered either way, so it
+    /// stays put when the filters change.
+    mutating func set(_ path: String, included: Bool) {
+        if included {
+            removed.remove(path)
+            added.insert(path)
+        } else {
+            added.remove(path)
+            removed.insert(path)
+        }
+    }
+
+    /// Kids' movies and shows, with any library named for kids thrown in,
+    /// since those often aren't on TMDB.
+    static func kidsAndFamily(libraries: [LibraryConfig]) -> CollectionConfig {
+        var rules = CollectionRules.kidsAndFamily
+        let kids = libraries.filter { $0.name.localizedCaseInsensitiveContains("kid") || $0.path.localizedCaseInsensitiveContains("child") }
+        if !kids.isEmpty { rules.filters.insert(.libraries(Set(kids.map(\.id))), at: 0) }
+        return CollectionConfig(name: "Kids & Family", rules: rules)
+    }
+}
+
 /// Everything the user sets in Settings. Plain values in UserDefaults, the
 /// password in the Keychain.
 @Observable
@@ -43,6 +81,9 @@ final class AppSettings {
     var libraries: [LibraryConfig] {
         didSet { defaults.set(try? JSONEncoder().encode(libraries), forKey: "libraries") }
     }
+    var collections: [CollectionConfig] {
+        didSet { defaults.set(try? JSONEncoder().encode(collections), forKey: "collections") }
+    }
     /// Frames taken from the videos go to the share as well as this device,
     /// and frames already there are used, so each is only taken once for
     /// every phone. Off keeps them on this device only. See `SharedFrames`.
@@ -58,9 +99,18 @@ final class AppSettings {
         username = defaults.string(forKey: "username") ?? ""
         password = Keychain.get("smb-password") ?? ""
         tmdbKey = defaults.string(forKey: "tmdbKey") ?? ""
-        libraries = defaults.data(forKey: "libraries")
+        let libraries = defaults.data(forKey: "libraries")
             .flatMap { try? JSONDecoder().decode([LibraryConfig].self, from: $0) } ?? LibraryConfig.defaults
+        self.libraries = libraries
         framesOnShare = defaults.object(forKey: "framesOnShare") as? Bool ?? true
+        // A kids collection to start with, saved at once so its ID (the
+        // tab's) holds from launch to launch. Deleting it leaves none.
+        if let saved = defaults.data(forKey: "collections").flatMap({ try? JSONDecoder().decode([CollectionConfig].self, from: $0) }) {
+            collections = saved
+        } else {
+            collections = [.kidsAndFamily(libraries: libraries)]
+            defaults.set(try? JSONEncoder().encode(collections), forKey: "collections")
+        }
     }
 
     /// Tolerates "smb://host/share" in the address field and "share/folder"
@@ -131,6 +181,20 @@ final class AppSettings {
     }
 
     var isConfigured: Bool { shareConfig.isComplete }
+
+    func collection(_ id: UUID) -> CollectionConfig? { collections.first { $0.id == id } }
+
+    func save(_ collection: CollectionConfig) {
+        if let i = collections.firstIndex(where: { $0.id == collection.id }) {
+            collections[i] = collection
+        } else {
+            collections.append(collection)
+        }
+    }
+
+    func deleteCollection(_ id: UUID) {
+        collections.removeAll { $0.id == id }
+    }
 
     func library(_ id: UUID) -> LibraryConfig? { libraries.first { $0.id == id } }
 }

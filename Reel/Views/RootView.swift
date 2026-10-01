@@ -18,6 +18,13 @@ struct RootView: View {
                 .tabItem { Label("Home", systemImage: "house") }
                 .tag("home")
 
+            // Next to Home, so an iPhone's tab bar keeps them out of More.
+            ForEach(settings.collections) { collection in
+                NavigationStack { CollectionView(collection: collection) }
+                    .tabItem { Label(collection.name, systemImage: "square.stack") }
+                    .tag(collection.id.uuidString)
+            }
+
             ForEach(settings.libraries) { library in
                 NavigationStack { LibraryView(library: library) }
                     .tabItem { Label(library.name, systemImage: library.systemImage) }
@@ -33,6 +40,12 @@ struct RootView: View {
         }
         .task {
             if !settings.isConfigured { tab = "settings" }
+        }
+        // A collection deleted from its own tab leaves nothing selected.
+        .onChange(of: settings.collections.map(\.id)) { _, ids in
+            if let id = UUID(uuidString: tab), !ids.contains(id), !settings.libraries.contains(where: { $0.id == id }) {
+                tab = "home"
+            }
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
             progress.start(settings: settings, context: context)

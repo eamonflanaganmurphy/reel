@@ -112,6 +112,7 @@ private struct ShowPage: View {
                 Button {
                     episodes.forEach { $0.setWatched(false) }
                 } label: { Label("Mark Season as Unwatched", systemImage: "circle") }
+                CollectionMenuItems(path: show.path, candidate: show.collectionCandidate(details: details))
             } label: {
                 Image(systemName: "ellipsis.circle")
             }

@@ -20,8 +20,10 @@
 		6AD5DFEB420F480A97C55E13 /* PlayerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAFE47A2692ABE777C49988A /* PlayerScreen.swift */; };
 		6BDE290D2AB09DB308721A04 /* LibrarySync.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFE2925315D4271AACA8FF00 /* LibrarySync.swift */; };
 		7149CC824B80A18E17DBE1B9 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF0A3EA11E64E1138F3C33D /* AppSettings.swift */; };
+		774C93E7DBF6B431955B24C5 /* CollectionEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A3AFAE203B40FB4023F0B70 /* CollectionEditor.swift */; };
 		7799BB781813431DEA4F182B /* ReelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79F565BAF7B28F9E3EC54A3F /* ReelApp.swift */; };
 		7A8B5CBBB32F6715D8363A30 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0AAF0D94AFB0965BD3E79B90 /* Assets.xcassets */; };
+		7B2D503D6257E96DF36A8408 /* CollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BAB81C6984B6B98401F9C05 /* CollectionView.swift */; };
 		7F89A7C60100AD5372694FFC /* Artwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC7E30578769C84FB07BFA7 /* Artwork.swift */; };
 		843489893C6170A1E4443CCE /* ReelCore in Frameworks */ = {isa = PBXBuildFile; productRef = 65512CFB5321E4FB2DA29346 /* ReelCore */; };
 		A1E5AF1239BD18A4FF6A88A1 /* LibraryDestinations.swift in Sources */ = {isa = PBXBuildFile; fileRef = B58C755C1E38E8B8C648A5A2 /* LibraryDestinations.swift */; };
@@ -47,12 +49,14 @@
 		58F7ACED675EFCC23ADD9896 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		5F455BDF0C047F904BFE725E /* ServerBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerBrowser.swift; sourceTree = "<group>"; };
 		6428B740987B39504225BD6A /* ShowDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowDetailView.swift; sourceTree = "<group>"; };
+		6BAB81C6984B6B98401F9C05 /* CollectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionView.swift; sourceTree = "<group>"; };
 		6C7F67623317E3959B0E334F /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		6D28B05F3E3322E261FDEEEB /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		79DC014A211325D5E6A5DC6F /* DetailsLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailsLoader.swift; sourceTree = "<group>"; };
 		79F565BAF7B28F9E3EC54A3F /* ReelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReelApp.swift; sourceTree = "<group>"; };
 		7E1FF8E6B66FEAE5BA2CBF54 /* PlayerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerController.swift; sourceTree = "<group>"; };
 		83967A614AB7179780F3BC4A /* AddedSubtitles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddedSubtitles.swift; sourceTree = "<group>"; };
+		8A3AFAE203B40FB4023F0B70 /* CollectionEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionEditor.swift; sourceTree = "<group>"; };
 		B58C755C1E38E8B8C648A5A2 /* LibraryDestinations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryDestinations.swift; sourceTree = "<group>"; };
 		C7C4CAA7CFF687FF8B6724FD /* Reel.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Reel.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CEF0A3EA11E64E1138F3C33D /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
@@ -120,6 +124,8 @@
 		A057815D2197601F38FF5EC0 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				8A3AFAE203B40FB4023F0B70 /* CollectionEditor.swift */,
+				6BAB81C6984B6B98401F9C05 /* CollectionView.swift */,
 				D5125BF7832A8883838DED6B /* Components.swift */,
 				42DB472F8C643B1F9820CD8E /* DetailComponents.swift */,
 				ED609B3C422D7231300412C7 /* FolderBrowser.swift */,
@@ -240,6 +246,8 @@
 				3126035AAF3226BC3879D42F /* AddedSubtitles.swift in Sources */,
 				7149CC824B80A18E17DBE1B9 /* AppSettings.swift in Sources */,
 				7F89A7C60100AD5372694FFC /* Artwork.swift in Sources */,
+				774C93E7DBF6B431955B24C5 /* CollectionEditor.swift in Sources */,
+				7B2D503D6257E96DF36A8408 /* CollectionView.swift in Sources */,
 				B50FDBC8AA8DDB4F3C8D67DE /* Components.swift in Sources */,
 				5F976A6F08F7BBF11C493E83 /* DetailComponents.swift in Sources */,
 				DD1903CDAA1560DE366CFCC3 /* DetailsLoader.swift in Sources */,
