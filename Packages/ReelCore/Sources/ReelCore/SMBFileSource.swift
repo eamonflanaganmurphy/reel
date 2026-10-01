@@ -140,11 +140,16 @@ public final class SMBFileSource: ShareSource, @unchecked Sendable {
                 // login) shows up in the write below.
                 try? await manager.createDirectory(atPath: folder)
             }
-            let temp = path + ".tmp"
-            try? await manager.removeItem(atPath: temp)
-            try await manager.write(data: data, toPath: temp, progress: nil)
-            try? await manager.removeItem(atPath: path)
-            try await manager.moveItem(atPath: temp, toPath: path)
+            let temp = Self.temporaryName(for: path)
+            do {
+                try await manager.write(data: data, toPath: temp, progress: nil)
+                try? await manager.removeItem(atPath: path)
+                try await manager.moveItem(atPath: temp, toPath: path)
+            } catch {
+                // Nothing else will ever tidy up a name only this write used.
+                try? await manager.removeItem(atPath: temp)
+                throw error
+            }
         }
     }
 

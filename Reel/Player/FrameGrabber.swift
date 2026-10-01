@@ -1,7 +1,49 @@
 import Foundation
 import ReelCore
+import SwiftData
 import UIKit
 import VLCKitSPM
+
+/// Takes a frame from every video with no poster or still while the app is
+/// open, so they're on disk before anyone scrolls to them rather than read
+/// one by one as they come on screen. Goes through `ArtworkStore` like the
+/// views do, so a grab a view is also waiting for is only done once, and
+/// through `FrameGrabber`'s queue, so it never adds a second read on the
+/// router and waits while a scan or a video has it.
+@MainActor
+enum FrameBackfill {
+    static func run(settings: AppSettings, context: ModelContext) async {
+        let store = ArtworkStore.shared
+        let config = settings.shareConfig
+        let framesOnShare = settings.framesOnShare
+        for ref in wanted(context: context) where !store.isSaved(ref) {
+            // Away from the share: the rest wait for the next time the app opens.
+            guard !Task.isCancelled, !FrameGrabber.shared.isOffline else { return }
+            _ = await store.image(for: ref, config: config, framesOnShare: framesOnShare)
+        }
+    }
+
+    /// Frame refs for everything that would otherwise show one, grid posters
+    /// first: movies, and shows whose cover is a frame. Then episodes,
+    /// newest first.
+    private static func wanted(context: ModelContext) -> [String] {
+        let videos = (try? context.fetch(FetchDescriptor<Video>(
+            predicate: #Predicate { $0.posterRef == nil },
+            sortBy: [SortDescriptor(\.addedAt, order: .reverse)]))) ?? []
+        let shows = (try? context.fetch(FetchDescriptor<Show>(
+            predicate: #Predicate { $0.posterRef == nil && $0.backdropRef == nil },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]))) ?? []
+
+        var covers = videos.filter(\.isMovie).map(\.frameRef)
+        for show in shows {
+            if let cover = show.fallbackRefs.lazy.compactMap({ $0 }).first, cover.hasPrefix("frame:") {
+                covers.append(cover)
+            }
+        }
+        var seen = Set<String>()
+        return (covers + videos.map(\.frameRef)).filter { seen.insert($0).inserted }
+    }
+}
 
 /// Stills taken from the video files themselves, for anything TMDB and the
 /// share have no poster or episode image for. VLC opens the file over SMB or WebDAV,
@@ -36,9 +78,12 @@ final class FrameGrabber: NSObject {
     /// failed, so frames come back once the share does.
     private var offlineUntil = Date.distantPast
 
+    var isOffline: Bool { Date() < offlineUntil }
+
     /// JPEG of a frame from the file at `path`, or nil if there isn't one to
-    /// be had (or the caller stopped waiting).
-    func jpeg(for path: String, config: ShareConfig) async -> Data? {
+    /// be had (or the caller stopped waiting). With `keepOnShare` it's saved
+    /// to the share too, for the other phones (see `SharedFrames`).
+    func jpeg(for path: String, config: ShareConfig, keepOnShare: Bool) async -> Data? {
         guard !failed.contains(path), let url = config.playbackURL(for: path) else { return nil }
         while true {
             guard Date() >= offlineUntil else { return nil }
@@ -66,7 +111,10 @@ final class FrameGrabber: NSObject {
                 }
                 return nil
             }
-            return frame.jpegData(compressionQuality: 0.8)
+            guard let jpeg = frame.jpegData(compressionQuality: 0.8) else { return nil }
+            // Still this grab's turn, so the upload isn't alongside the next grab.
+            if keepOnShare { await SharedFrameStore.shared.save(jpeg, for: path, config: config) }
+            return jpeg
         }
     }
 

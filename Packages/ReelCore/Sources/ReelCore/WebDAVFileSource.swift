@@ -76,7 +76,7 @@ public final class WebDAVFileSource: ShareSource, Sendable {
             // (a read-only login) shows up in the write below.
             _ = try? await send(request(folder, method: "MKCOL", directory: true))
         }
-        let temp = path + ".tmp"
+        let temp = Self.temporaryName(for: path)
         var put = try request(temp, method: "PUT")
         put.httpBody = data
         let (_, putStatus) = try await send(put)

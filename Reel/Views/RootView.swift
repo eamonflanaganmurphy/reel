@@ -58,6 +58,13 @@ struct RootView: View {
         .onChange(of: sync.isRunning || playback.session != nil, initial: true) { _, busy in
             FrameGrabber.shared.paused = busy
         }
+        // Frames for everything without a poster or still, taken while the
+        // app is open and the router is otherwise idle. Restarted after each
+        // scan, which may have added videos.
+        .task(id: settings.isConfigured && scenePhase == .active && !sync.isRunning && playback.session == nil) {
+            guard settings.isConfigured, scenePhase == .active, !sync.isRunning, playback.session == nil else { return }
+            await FrameBackfill.run(settings: settings, context: context)
+        }
     }
 
     /// Picks up new downloads, at most every 15 minutes, and otherwise

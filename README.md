@@ -18,6 +18,9 @@ server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve 
   the scan, one request per title the first time, and are kept, so all of this works offline too.
 - **Thumbnails:** anything without a TMDB poster or episode still shows a frame from the video itself. Frames are
   taken one at a time, wait while a scan or playback is running, and are cached, so each file is only read once.
+  They're saved in a hidden `.reel/frames` folder on the share too, so once one phone has a video's frame, every other
+  phone (or a reinstall) loads that small JPEG instead of reading the video again. Turn off **Video Thumbnails → Save
+  on the Share** in Settings to keep them on the phone only.
   A show tries an episode still, then frames from its first three episodes; an episode with no readable frame uses the
   show's backdrop. If nothing loads at all, a title card is generated, so every show and episode has a picture.
 - **Playback:** resume and watch progress, autoplay of the next episode, audio and subtitle track choice. Sidecar `.srt` files from Bazarr are picked up automatically.

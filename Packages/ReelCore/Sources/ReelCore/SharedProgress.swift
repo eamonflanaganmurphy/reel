@@ -27,7 +27,8 @@ public struct ProgressFile: Codable, Sendable, Equatable {
     }
 }
 
-/// Somewhere progress files can be kept: the share in the app, memory in tests.
+/// Somewhere progress files (and shared frames) can be kept: the share in
+/// the app, memory in tests.
 public protocol ProgressStorage: Sendable {
     func list(_ path: String) async throws -> [FileEntry]
     func read(_ path: String, maxBytes: UInt64) async throws -> Data

@@ -184,6 +184,18 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle("Save on the Share", isOn: $settings.framesOnShare)
+            } header: {
+                Text("Video Thumbnails")
+            } footer: {
+                if settings.framesOnShare {
+                    Text("Frames taken from videos with no poster or still are saved in the hidden .reel folder on the share as well as on this device, so each one is only read out of a video once for every phone.")
+                } else {
+                    Text("Frames taken from videos with no poster or still are kept on this device only, so each phone reads its own out of the videos.")
+                }
+            }
+
+            Section {
                 Button {
                     Task { await sync.run(settings: settings, context: context) }
                 } label: {
@@ -194,6 +206,12 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(!settings.isConfigured || sync.isRunning)
+
+                Button("Fix Missing Metadata") {
+                    sync.resetMissingMetadata(settings: settings, context: context)
+                    Task { await sync.run(settings: settings, context: context) }
+                }
+                .disabled(!settings.isConfigured || sync.isRunning || settings.tmdbKey.isEmpty)
 
                 Button("Re-fetch All Metadata") {
                     sync.resetMetadata(context: context)

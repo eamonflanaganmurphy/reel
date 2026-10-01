@@ -43,6 +43,10 @@ final class AppSettings {
     var libraries: [LibraryConfig] {
         didSet { defaults.set(try? JSONEncoder().encode(libraries), forKey: "libraries") }
     }
+    /// Frames taken from the videos go to the share as well as this device,
+    /// and frames already there are used, so each is only taken once for
+    /// every phone. Off keeps them on this device only. See `SharedFrames`.
+    var framesOnShare: Bool { didSet { defaults.set(framesOnShare, forKey: "framesOnShare") } }
 
     @ObservationIgnored private let defaults = UserDefaults.standard
 
@@ -56,6 +60,7 @@ final class AppSettings {
         tmdbKey = defaults.string(forKey: "tmdbKey") ?? ""
         libraries = defaults.data(forKey: "libraries")
             .flatMap { try? JSONDecoder().decode([LibraryConfig].self, from: $0) } ?? LibraryConfig.defaults
+        framesOnShare = defaults.object(forKey: "framesOnShare") as? Bool ?? true
     }
 
     /// Tolerates "smb://host/share" in the address field and "share/folder"

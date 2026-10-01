@@ -73,6 +73,8 @@ final class LibrarySync {
                 }
             }
 
+            // Other phones may have added frames since this one last looked.
+            await SharedFrameStore.shared.refresh()
             lastSync = .now
             UserDefaults.standard.set(lastSync, forKey: "lastSync")
             state = problems.isEmpty ? .idle : .failed(problems.joined(separator: "\n"))
@@ -88,6 +90,32 @@ final class LibrarySync {
         for show in (try? context.fetch(FetchDescriptor<Show>())) ?? [] { show.metadataFetched = false }
         try? context.save()
     }
+
+    /// Forget fetched metadata only for what TMDB didn't match, or matched
+    /// without a poster, backdrop or description, so the next sync looks
+    /// just those up again. Everything complete keeps what it has.
+    func resetMissingMetadata(settings: AppSettings, context: ModelContext) {
+        let tmdbLibraries = Set(settings.libraries.filter(\.useTMDB).map(\.id))
+        for video in (try? context.fetch(FetchDescriptor<Video>(predicate: #Predicate { $0.isMovie }))) ?? []
+        where tmdbLibraries.contains(video.libraryID) {
+            if video.tmdbID == nil || !Self.isTMDB(video.posterRef) || video.backdropRef == nil || video.overview.isBlank {
+                video.metadataFetched = false
+            }
+        }
+        for show in (try? context.fetch(FetchDescriptor<Show>())) ?? [] where tmdbLibraries.contains(show.libraryID) {
+            if show.tmdbID == nil || !Self.isTMDB(show.posterRef) || show.backdropRef == nil || show.overview.isBlank {
+                show.metadataFetched = false
+            }
+            // Specials and odd numbering often have no TMDB entry at all, so
+            // only episodes TMDB could know about: ones with a number.
+            for episode in show.episodes where episode.episode != nil && episode.overview.isBlank {
+                episode.metadataFetched = false
+            }
+        }
+        try? context.save()
+    }
+
+    private static func isTMDB(_ ref: String?) -> Bool { ref?.hasPrefix("https:") == true }
 
     private func count(in library: LibraryConfig, context: ModelContext) -> Int {
         let id = library.id
@@ -211,7 +239,7 @@ final class LibrarySync {
         try context.save()
 
         let shows = try context.fetch(FetchDescriptor<Show>())
-            .filter { tmdbLibraries.contains($0.libraryID) && ($0.tmdbID == nil ? !$0.metadataFetched : $0.episodes.contains { !$0.metadataFetched }) }
+            .filter { tmdbLibraries.contains($0.libraryID) && (!$0.metadataFetched || $0.episodes.contains { !$0.metadataFetched }) }
         for (i, show) in shows.enumerated() {
             state = .scanning("Fetching TV info \(i + 1) of \(shows.count)…")
             if !show.metadataFetched {
@@ -325,4 +353,8 @@ final class LibrarySync {
         if let share = error as? ShareError, let message = share.errorDescription { return message }
         return error.localizedDescription
     }
+}
+
+private extension Optional<String> {
+    var isBlank: Bool { self?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true }
 }

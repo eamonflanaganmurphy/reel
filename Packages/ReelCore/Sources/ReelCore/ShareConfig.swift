@@ -158,6 +158,12 @@ extension ShareSource {
     public func read(_ path: String) async throws -> Data {
         try await read(path, maxBytes: 20_000_000)
     }
+
+    /// Where `replace` writes before moving the file into place. Unique to
+    /// the write, as two phones can save the same shared frame at once.
+    static func temporaryName(for path: String) -> String {
+        "\(path).\(UUID().uuidString.prefix(8)).tmp"
+    }
 }
 
 /// A failure with enough context to tell the user what to fix. Codes are

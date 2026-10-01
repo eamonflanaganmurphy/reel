@@ -39,6 +39,61 @@ final class ServerConnection: @unchecked Sendable {
     }
 }
 
+/// Which frames are on the share (see `SharedFrames`), from one listing of
+/// the folder, so looking for one that isn't there costs no request. It's
+/// listed again after each scan, for frames other phones have added, and a
+/// minute after a listing fails.
+actor SharedFrameStore {
+    static let shared = SharedFrameStore()
+
+    private var names: Set<String> = []
+    private var listedFor: ShareConfig?
+    private var listedAt = Date.distantPast
+    private var listingFailed = false
+    private var listing: (config: ShareConfig, task: Task<Set<String>?, Never>)?
+
+    func refresh() {
+        listedFor = nil
+        listing = nil
+    }
+
+    /// The frame for the video at `path`, if a phone has already taken it.
+    func read(_ path: String, config: ShareConfig) async -> Data? {
+        guard await names(for: config).contains(SharedFrames.name(for: path)) else { return nil }
+        return try? await ServerConnection.shared.source(for: config)
+            .read(SharedFrames.path(for: path), maxBytes: 5_000_000)
+    }
+
+    /// A failure, e.g. a read-only login, only means the next phone takes
+    /// the frame itself; this one has it either way.
+    func save(_ jpeg: Data, for path: String, config: ShareConfig) async {
+        guard (try? await ServerConnection.shared.source(for: config)
+            .replace(SharedFrames.path(for: path), with: jpeg)) != nil else { return }
+        if listedFor == config { names.insert(SharedFrames.name(for: path)) }
+    }
+
+    private func names(for config: ShareConfig) async -> Set<String> {
+        if listedFor == config, !listingFailed || Date().timeIntervalSince(listedAt) < 60 { return names }
+        // Every cell on screen asks at once; they share one listing.
+        let task: Task<Set<String>?, Never>
+        if let listing, listing.config == config {
+            task = listing.task
+        } else {
+            task = Task { try? await SharedFrames.list(in: ServerConnection.shared.source(for: config)) }
+            listing = (config, task)
+        }
+        let listed = await task.value
+        if listing?.task == task {
+            listing = nil
+            names = listed ?? []
+            listedFor = config
+            listedAt = .now
+            listingFailed = listed == nil
+        }
+        return listed ?? []
+    }
+}
+
 /// Posters, backdrops and thumbnails, from TMDB, the share, or a frame of the
 /// video itself. Kept on disk so the library still looks right when the
 /// router is out of reach, and with no internet (on the router's own WiFi on
@@ -79,7 +134,9 @@ actor ArtworkStore {
         memory.totalCostLimit = 150_000_000
     }
 
-    func image(for ref: String?, config: ShareConfig) async -> UIImage? {
+    /// `framesOnShare` is the setting: whether a frame of the video is
+    /// looked for on the share, and saved there once taken.
+    func image(for ref: String?, config: ShareConfig, framesOnShare: Bool = false) async -> UIImage? {
         guard let ref, !ref.isEmpty else { return nil }
         if let hit = memory.object(forKey: ref as NSString) { return hit }
 
@@ -95,7 +152,7 @@ actor ArtworkStore {
                 if let data = try? Data(contentsOf: file), let image = UIImage(data: data) {
                     return await Self.prepare(image)
                 }
-                guard let data = await Self.fetch(ref, config: config), let image = UIImage(data: data) else { return nil }
+                guard let data = await Self.fetch(ref, config: config, framesOnShare: framesOnShare), let image = UIImage(data: data) else { return nil }
                 try? data.write(to: file, options: .atomic)
                 return await Self.prepare(image)
             }
@@ -191,9 +248,11 @@ actor ArtworkStore {
         URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 15)
     }
 
-    private static func fetch(_ ref: String, config: ShareConfig) async -> Data? {
+    private static func fetch(_ ref: String, config: ShareConfig, framesOnShare: Bool) async -> Data? {
         if ref.hasPrefix("frame:") {
-            return await FrameGrabber.shared.jpeg(for: String(ref.dropFirst(6)), config: config)
+            let path = String(ref.dropFirst(6))
+            if framesOnShare, let data = await SharedFrameStore.shared.read(path, config: config) { return data }
+            return await FrameGrabber.shared.jpeg(for: path, config: config, keepOnShare: framesOnShare)
         }
         // "smb:" predates WebDAV; it means the share, whatever it's served over.
         if ref.hasPrefix("smb:") {
@@ -256,7 +315,8 @@ struct ArtworkImage: View {
             var loaded: UIImage?
             for candidate in [ref] + fallbackRefs where loaded == nil {
                 guard !Task.isCancelled else { return }
-                loaded = await ArtworkStore.shared.image(for: candidate, config: settings.shareConfig)
+                loaded = await ArtworkStore.shared.image(for: candidate, config: settings.shareConfig,
+                                                         framesOnShare: settings.framesOnShare)
             }
             // A superseded load mustn't blank what its replacement shows.
             guard !Task.isCancelled else { return }
