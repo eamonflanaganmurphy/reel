@@ -63,7 +63,7 @@ public final class SMBFileSource: ShareSource, @unchecked Sendable {
     }
 
     private func connect() async throws -> SMB2Manager {
-        let session = try lock.withLock {
+        let current = try lock.withLock {
             if let session { return session }
             guard let manager = SMB2Manager(url: url, domain: config.domain, credential: config.smbCredential)
             else { throw ShareError.invalidHost(config.host) }
@@ -87,12 +87,12 @@ public final class SMBFileSource: ShareSource, @unchecked Sendable {
             return new
         }
         do {
-            try await session.ready.value
+            try await current.ready.value
         } catch {
-            drop(session.manager)
+            drop(current.manager)
             throw error
         }
-        return session.manager
+        return current.manager
     }
 
     /// Runs `operation` on the open session. libsmb2 never reconnects by
