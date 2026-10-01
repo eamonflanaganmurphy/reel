@@ -15,20 +15,38 @@ extension ShareConfig {
 
 /// One connection to one share. AMSMB2 queues requests internally, so a
 /// single instance can be shared across tasks.
+///
+/// Each session gets its own `SMB2Manager`, connected once before anything
+/// uses it. AMSMB2 swaps a manager's client in `connectShare` (when the old
+/// one doesn't answer) without stopping requests on its concurrent queue
+/// from reading it at the same time, which crashes in libsmb2 or in a
+/// release. That's just what happens on coming back from the background,
+/// when the posters, the progress pull and the scan all start at once on a
+/// session iOS has since closed. A fresh manager per session means a client
+/// is never replaced under a running request; ones still using the old
+/// session keep it alive until they finish.
 public final class SMBFileSource: ShareSource, @unchecked Sendable {
     public let config: ShareConfig
-    private let manager: SMB2Manager
+    private let url: URL
     private let lock = NSLock()
     // Guarded by lock. Concurrent callers share one connection attempt.
-    private var connection: Task<Void, any Error>?
+    private var session: Session?
+
+    private struct Session {
+        let manager: SMB2Manager
+        let ready: Task<Void, any Error>
+    }
 
     public init(config: ShareConfig) throws {
         guard let url = config.smbServerURL,
-              let manager = SMB2Manager(url: url, domain: config.domain, credential: config.smbCredential)
+              SMB2Manager(url: url, domain: config.domain, credential: config.smbCredential) != nil
         else { throw ShareError.invalidHost(config.host) }
         self.config = config
-        self.manager = manager
-        manager.timeout = 20
+        self.url = url
+    }
+
+    deinit {
+        Self.release(session)
     }
 
     /// Share names on the server, for the settings screen.
@@ -44,11 +62,14 @@ public final class SMBFileSource: ShareSource, @unchecked Sendable {
         }
     }
 
-    private func connect() async throws {
-        let task = lock.withLock {
-            if let connection { return connection }
-            let manager = manager, share = config.share, host = config.host
-            let t = Task {
+    private func connect() async throws -> SMB2Manager {
+        let session = try lock.withLock {
+            if let session { return session }
+            guard let manager = SMB2Manager(url: url, domain: config.domain, credential: config.smbCredential)
+            else { throw ShareError.invalidHost(config.host) }
+            manager.timeout = 20
+            let share = config.share, host = config.host
+            let ready = Task {
                 do {
                     try await manager.connectShare(name: share)
                 } catch {
@@ -61,31 +82,50 @@ public final class SMBFileSource: ShareSource, @unchecked Sendable {
                     throw ShareError.server(host: host, code: code, detail: detail)
                 }
             }
-            connection = t
-            return t
+            let new = Session(manager: manager, ready: ready)
+            self.session = new
+            return new
         }
         do {
-            try await task.value
+            try await session.ready.value
         } catch {
-            lock.withLock { connection = nil }
+            drop(session.manager)
             throw error
         }
+        return session.manager
     }
 
     /// Runs `operation` on the open session. libsmb2 never reconnects by
-    /// itself and AMSMB2 only does in `connectShare`, so a session that died
-    /// since it was opened (iOS reclaims a suspended app's sockets, the
-    /// phone changed network, the router restarted) is reopened and the
-    /// operation tried once more.
-    private func withConnection<T>(_ operation: () async throws -> T) async throws -> T {
-        try await connect()
+    /// itself, so a session that died since it was opened (iOS reclaims a
+    /// suspended app's sockets, the phone changed network, the router
+    /// restarted) is replaced and the operation tried once more.
+    private func withConnection<T>(_ operation: (SMB2Manager) async throws -> T) async throws -> T {
+        let manager = try await connect()
         do {
-            return try await operation()
+            return try await operation(manager)
         } catch let error where Self.isConnectionError(ShareError.code(of: error).0) {
-            invalidate()
-            try await connect()
-            return try await operation()
+            // Requests that failed together start one new session between them.
+            drop(manager)
+            return try await operation(try await connect())
         }
+    }
+
+    /// Forgets `manager`'s session, unless it has already been replaced.
+    private func drop(_ manager: SMB2Manager) {
+        let old: Session? = lock.withLock {
+            guard let session, session.manager === manager else { return nil }
+            defer { self.session = nil }
+            return session
+        }
+        Self.release(old)
+    }
+
+    /// A manager's last release closes its session, waiting on the server
+    /// for up to its timeout when the socket has died, so it never happens on
+    /// the caller's thread, which may be the main one.
+    private static func release(_ session: Session?) {
+        guard let session else { return }
+        DispatchQueue.global(qos: .utility).async { withExtendedLifetime(session) {} }
     }
 
     static func isConnectionError(_ code: Int32) -> Bool {
@@ -97,7 +137,7 @@ public final class SMBFileSource: ShareSource, @unchecked Sendable {
         let base = Self.normalize(path)
         let items: [[URLResourceKey: Any]]
         do {
-            items = try await withConnection { try await manager.contentsOfDirectory(atPath: base) }
+            items = try await withConnection { try await $0.contentsOfDirectory(atPath: base) }
         } catch let error as ShareError {
             throw error
         } catch {
@@ -123,7 +163,7 @@ public final class SMBFileSource: ShareSource, @unchecked Sendable {
 
     public func read(_ path: String, maxBytes: UInt64) async throws -> Data {
         let path = Self.normalize(path)
-        return try await withConnection {
+        return try await withConnection { manager in
             try await manager.contents(atPath: path, range: 0..<maxBytes, progress: nil)
         }
     }
@@ -132,7 +172,7 @@ public final class SMBFileSource: ShareSource, @unchecked Sendable {
     /// first and is renamed into place, so a reader never sees half of it.
     public func replace(_ path: String, with data: Data) async throws {
         let path = Self.normalize(path)
-        try await withConnection {
+        try await withConnection { manager in
             var folder = ""
             for part in path.split(separator: "/").dropLast() {
                 folder = folder.isEmpty ? String(part) : "\(folder)/\(part)"
@@ -153,16 +193,23 @@ public final class SMBFileSource: ShareSource, @unchecked Sendable {
         }
     }
 
+    /// Makes the next request start a new session, e.g. after the app has
+    /// been suspended and its socket may have been closed.
     public func invalidate() {
-        lock.withLock { connection = nil }
+        let old: Session? = lock.withLock {
+            defer { session = nil }
+            return session
+        }
+        Self.release(old)
     }
 
     public func disconnect() async {
-        let wasConnected = lock.withLock {
-            defer { connection = nil }
-            return connection != nil
+        let old: Session? = lock.withLock {
+            defer { session = nil }
+            return session
         }
-        if wasConnected { try? await manager.disconnectShare() }
+        guard let old, (try? await old.ready.value) != nil else { return }
+        try? await old.manager.disconnectShare(gracefully: true)
     }
 
     static func normalize(_ path: String) -> String {
