@@ -84,6 +84,11 @@ final class AppSettings {
     var collections: [CollectionConfig] {
         didSet { defaults.set(try? JSONEncoder().encode(collections), forKey: "collections") }
     }
+    /// Libraries and collections left out of the tab bar. Kept apart from
+    /// them so their saved form stays the same. Home always shows.
+    var hiddenTabs: Set<UUID> {
+        didSet { defaults.set(hiddenTabs.map(\.uuidString), forKey: "hiddenTabs") }
+    }
     /// Frames taken from the videos go to the share as well as this device,
     /// and frames already there are used, so each is only taken once for
     /// every phone. Off keeps them on this device only. See `SharedFrames`.
@@ -110,6 +115,7 @@ final class AppSettings {
         }
         self.libraries = libraries
         framesOnShare = defaults.object(forKey: "framesOnShare") as? Bool ?? true
+        hiddenTabs = Set((defaults.stringArray(forKey: "hiddenTabs") ?? []).compactMap(UUID.init(uuidString:)))
         // A kids collection to start with, saved at once so its ID (the
         // tab's) holds from launch to launch. Deleting it leaves none.
         if let saved = defaults.data(forKey: "collections").flatMap({ try? JSONDecoder().decode([CollectionConfig].self, from: $0) }) {
@@ -188,6 +194,12 @@ final class AppSettings {
     }
 
     var isConfigured: Bool { shareConfig.isComplete }
+
+    func showsTab(_ id: UUID) -> Bool { !hiddenTabs.contains(id) }
+
+    func setTab(_ id: UUID, shown: Bool) {
+        if shown { hiddenTabs.remove(id) } else { hiddenTabs.insert(id) }
+    }
 
     func collection(_ id: UUID) -> CollectionConfig? { collections.first { $0.id == id } }
 

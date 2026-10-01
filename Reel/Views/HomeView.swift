@@ -39,6 +39,10 @@ struct HomeView: View {
             .padding(.vertical)
         }
         .navigationTitle("Reel")
+        .toolbar {
+            Button(action: openSettings) { Image(systemName: "gearshape") }
+                .accessibilityLabel("Settings")
+        }
         .refreshable { await sync.run(settings: settings, context: context) }
         .libraryDestinations()
     }

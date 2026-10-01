@@ -10,42 +10,45 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var tab = "home"
+    @State private var showingSettings = false
 
     var body: some View {
         @Bindable var playback = playback
         TabView(selection: $tab) {
-            NavigationStack { HomeView(openSettings: { tab = "settings" }) }
+            NavigationStack { HomeView(openSettings: { showingSettings = true }) }
                 .tabItem { Label("Home", systemImage: "house") }
                 .tag("home")
 
             // Next to Home, so an iPhone's tab bar keeps them out of More.
-            ForEach(settings.collections) { collection in
+            ForEach(settings.collections.filter { settings.showsTab($0.id) }) { collection in
                 NavigationStack { CollectionView(collection: collection) }
                     .tabItem { Label(collection.name, systemImage: "square.stack") }
                     .tag(collection.id.uuidString)
             }
 
-            ForEach(settings.libraries) { library in
+            ForEach(settings.libraries.filter { settings.showsTab($0.id) }) { library in
                 NavigationStack { LibraryView(library: library) }
                     .tabItem { Label(library.name, systemImage: library.systemImage) }
                     .tag(library.id.uuidString)
             }
-
-            NavigationStack { SettingsView() }
-                .tabItem { Label("Settings", systemImage: "gearshape") }
-                .tag("settings")
         }
         .fullScreenCover(item: $playback.session) { session in
             PlayerScreen(session: session)
         }
-        .task {
-            if !settings.isConfigured { tab = "settings" }
-        }
-        // A collection deleted from its own tab leaves nothing selected.
-        .onChange(of: settings.collections.map(\.id)) { _, ids in
-            if let id = UUID(uuidString: tab), !ids.contains(id), !settings.libraries.contains(where: { $0.id == id }) {
-                tab = "home"
+        .sheet(isPresented: $showingSettings) {
+            NavigationStack {
+                SettingsView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) { Button("Done") { showingSettings = false } }
+                    }
             }
+        }
+        .task {
+            if !settings.isConfigured { showingSettings = true }
+        }
+        // A tab hidden or deleted while open leaves nothing selected.
+        .onChange(of: visibleTabs) { _, tabs in
+            if !tabs.contains(tab) { tab = "home" }
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
             progress.start(settings: settings, context: context)
@@ -78,6 +81,11 @@ struct RootView: View {
             guard settings.isConfigured, scenePhase == .active, !sync.isRunning, playback.session == nil else { return }
             await FrameBackfill.run(settings: settings, context: context)
         }
+    }
+
+    private var visibleTabs: [String] {
+        ["home"] + (settings.collections.map(\.id) + settings.libraries.map(\.id))
+            .filter(settings.showsTab).map(\.uuidString)
     }
 
     /// Picks up new downloads, at most every 15 minutes, and otherwise

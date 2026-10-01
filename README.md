@@ -11,6 +11,8 @@ server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve 
   genre), library, year, TMDB rating and length, matching any or all of them. A **Kids & Family** collection is there to
   start with. The ••• menu on a movie or show page adds it to or removes it from a collection by hand, whatever the
   filters say. Collections are set up in Settings or from the filter button on their tab, and are kept on this device.
+- **Tabs:** Settings → Tabs shows or hides each library's and collection's tab. A hidden library is still scanned and
+  still shows on Home.
 - **Watch progress on the share:** where you got to in each video is kept in a hidden `.reel/progress` folder on
   the share, so every phone running Reel (or a reinstall) resumes in the same place and shows the same Keep Watching.
   Each install writes its own file and the newest entry wins, so the SMB login needs write access.
@@ -72,7 +74,7 @@ iPhone, and pick it in SideStore under **My Apps** → **+**.
 
 ## Set up in the app
 
-Open the Settings tab:
+Tap the gear at the top of Home to open Settings:
 
 - **Server:** pick **SMB** or **WebDAV**, then:
   - **SMB:** the router's IP (e.g. `192.168.8.1`), the share name, and the SMB username and password.

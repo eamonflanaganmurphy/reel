@@ -181,6 +181,21 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle(isOn: .constant(true)) { Label("Home", systemImage: "house") }
+                    .disabled(true)
+                ForEach(settings.collections) { collection in
+                    tabToggle(collection.id, name: collection.name, systemImage: "square.stack")
+                }
+                ForEach(settings.libraries) { library in
+                    tabToggle(library.id, name: library.name, systemImage: library.systemImage)
+                }
+            } header: {
+                Text("Tabs")
+            } footer: {
+                Text("A hidden library is still scanned, and its titles still show on Home and in collections. An iPhone fits five tabs; any more go under More.")
+            }
+
+            Section {
                 SecureField("API key or read access token", text: $settings.tmdbKey)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
@@ -271,6 +286,12 @@ struct SettingsView: View {
                     settings.libraries.append(saved)
                 }
             }
+        }
+    }
+
+    private func tabToggle(_ id: UUID, name: String, systemImage: String) -> some View {
+        Toggle(isOn: Binding(get: { settings.showsTab(id) }, set: { settings.setTab(id, shown: $0) })) {
+            Label(name, systemImage: systemImage)
         }
     }
 
