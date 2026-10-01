@@ -1,15 +1,6 @@
 {
-  "originHash" : "94b81f76136fbe1af5870389f759b279b2d2dd2fd2c827e4399a48a3d06513a5",
+  "originHash" : "e66773d21705306d0624984eaa01b92e2058390e469a78c3487ca0d9d8efc7ca",
   "pins" : [
-    {
-      "identity" : "amsmb2",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/amosavian/AMSMB2",
-      "state" : {
-        "revision" : "1726aaaf7adf63d7d1d2a0c5d1b0e635028215c0",
-        "version" : "4.0.3"
-      }
-    },
     {
       "identity" : "vlckit-spm",
       "kind" : "remoteSourceControl",

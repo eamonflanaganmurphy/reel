@@ -12,7 +12,8 @@ let package = Package(
         .executable(name: "reelscan", targets: ["reelscan"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/amosavian/AMSMB2", .upToNextMinor(from: "4.0.3")),
+        // A patched copy of AMSMB2 4.0.3; see Packages/AMSMB2/PATCHES.md.
+        .package(path: "../AMSMB2"),
     ],
     targets: [
         .target(
