@@ -228,15 +228,16 @@ extension TMDBDetails {
 }
 
 extension Video {
-    /// What a collection's filters look at, given this movie's decoded details.
-    func collectionCandidate(details: TMDBDetails?) -> CollectionCandidate {
-        CollectionCandidate(libraryID: libraryID, isMovie: true, year: year, details: details,
+    /// What a collection's filters look at, given this movie's decoded
+    /// details and its library's folder.
+    func collectionCandidate(details: TMDBDetails?, library: String) -> CollectionCandidate {
+        CollectionCandidate(library: library, isMovie: true, year: year, details: details,
                             runtimeMinutes: durationSeconds > 0 ? Int(durationSeconds / 60) : nil)
     }
 }
 
 extension Show {
-    func collectionCandidate(details: TMDBDetails?) -> CollectionCandidate {
-        CollectionCandidate(libraryID: libraryID, isMovie: false, year: year, details: details, runtimeMinutes: nil)
+    func collectionCandidate(details: TMDBDetails?, library: String) -> CollectionCandidate {
+        CollectionCandidate(library: library, isMovie: false, year: year, details: details, runtimeMinutes: nil)
     }
 }

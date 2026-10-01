@@ -8,6 +8,7 @@ struct ReelApp: App {
     @State private var sync = LibrarySync()
     @State private var playback = PlaybackCenter()
     @State private var progress = ProgressSync()
+    @State private var collections = CollectionSync()
 
     init() {
         // Plays through the silent switch, like any video app.
@@ -37,6 +38,7 @@ struct ReelApp: App {
                 .environment(sync)
                 .environment(playback)
                 .environment(progress)
+                .environment(collections)
                 .preferredColorScheme(.dark)
         }
         .modelContainer(for: [Show.self, Video.self])

@@ -10,7 +10,9 @@ server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve 
 - **Collections:** tabs that gather movies and shows from any library by filters: age rating, genre (or not in a
   genre), library, year, TMDB rating and length, matching any or all of them. A **Kids & Family** collection is there to
   start with. The ••• menu on a movie or show page adds it to or removes it from a collection by hand, whatever the
-  filters say. Collections are set up in Settings or from the filter button on their tab, and are kept on this device.
+  filters say. Collections are set up in Settings or from the filter button on their tab. They're kept in the hidden
+  `.reel/collections` folder on the share, so every phone has the same ones: the newest name and filters win, and hand
+  picks from different phones all stand. Which tabs show is up to each phone.
 - **Tabs:** Settings → Tabs shows or hides each library's and collection's tab. A hidden library is still scanned and
   still shows on Home.
 - **Watch progress on the share:** where you got to in each video is kept in a hidden `.reel/progress` folder on

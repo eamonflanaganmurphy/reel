@@ -4,8 +4,9 @@ import Foundation
 /// several values, any of which will do: rated G *or* PG, in the Family *or*
 /// Animation genre.
 public enum CollectionFilter: Codable, Sendable, Hashable {
-    /// In one of these libraries.
-    case libraries(Set<UUID>)
+    /// In one of these libraries, by folder in the share, which is the same
+    /// on every phone (a library's ID isn't).
+    case libraries(Set<String>)
     /// TMDB's age rating is one of these, e.g. "G", "PG", "TV-Y".
     case ageRatings(Set<String>)
     /// In at least one of these genres.
@@ -29,11 +30,12 @@ public enum CollectionFilter: Codable, Sendable, Hashable {
     /// and passes an exclusion.
     public func matches(_ title: CollectionCandidate) -> Bool {
         switch self {
-        case .libraries(let ids):
-            return ids.contains(title.libraryID)
+        case .libraries(let folders):
+            let folder = Self.normalized(folder: title.library)
+            return folders.contains { Self.normalized(folder: $0) == folder }
         case .ageRatings(let ratings):
-            guard let rating = title.details?.certification.map(Self.normalized) else { return false }
-            return ratings.contains { Self.normalized($0) == rating }
+            guard let rating = title.details?.certification.map(Self.normalized(rating:)) else { return false }
+            return ratings.contains { Self.normalized(rating: $0) == rating }
         case .genres(let genres):
             return !genres.isDisjoint(with: title.details?.genres ?? [])
         case .notGenres(let genres):
@@ -50,23 +52,29 @@ public enum CollectionFilter: Codable, Sendable, Hashable {
         }
     }
 
+    /// "/movies/" and "movies" are the same folder.
+    public static func normalized(folder: String) -> String {
+        folder.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
     /// "pg" and " PG " are the same rating.
-    static func normalized(_ rating: String) -> String {
+    static func normalized(rating: String) -> String {
         rating.trimmingCharacters(in: .whitespaces).uppercased()
     }
 }
 
 /// What a filter can look at in a movie or show.
 public struct CollectionCandidate: Sendable {
-    public var libraryID: UUID
+    /// The library's folder in the share.
+    public var library: String
     public var isMovie: Bool
     public var year: Int?
     public var details: TMDBDetails?
     /// TMDB's runtime, a typical episode's for a show, else the file's own length.
     public var runtimeMinutes: Int?
 
-    public init(libraryID: UUID, isMovie: Bool, year: Int?, details: TMDBDetails?, runtimeMinutes: Int?) {
-        self.libraryID = libraryID
+    public init(library: String, isMovie: Bool, year: Int?, details: TMDBDetails?, runtimeMinutes: Int?) {
+        self.library = library
         self.isMovie = isMovie
         self.year = year
         self.details = details

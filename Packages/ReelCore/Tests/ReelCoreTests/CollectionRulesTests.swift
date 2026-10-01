@@ -2,14 +2,14 @@ import XCTest
 @testable import ReelCore
 
 final class CollectionRulesTests: XCTestCase {
-    private let movies = UUID()
-    private let kids = UUID()
+    private let movies = "movies"
+    private let kids = "childrens-shows"
 
-    private func title(movie: Bool = true, library: UUID? = nil, year: Int? = 2010, rating: String? = nil,
+    private func title(movie: Bool = true, library: String? = nil, year: Int? = 2010, rating: String? = nil,
                        genres: [String] = [], score: Double? = nil, runtime: Int? = nil, tmdb: Bool = true) -> CollectionCandidate {
         let details = tmdb ? TMDBDetails(tagline: nil, genres: genres, runtime: runtime, rating: score, certification: rating,
                                          logoPath: nil, makers: [], network: nil, cast: [], related: []) : nil
-        return CollectionCandidate(libraryID: library ?? movies, isMovie: movie, year: year, details: details, runtimeMinutes: nil)
+        return CollectionCandidate(library: library ?? movies, isMovie: movie, year: year, details: details, runtimeMinutes: nil)
     }
 
     func testAnyFilterLetsATitleIn() {
@@ -50,7 +50,7 @@ final class CollectionRulesTests: XCTestCase {
     }
 
     func testLibraryCatchesTitlesWithoutTMDB() {
-        let rules = CollectionRules(filters: [.libraries([kids]), .ageRatings(["G"])])
+        let rules = CollectionRules(filters: [.libraries(["/" + kids + "/"]), .ageRatings(["G"])])
         XCTAssertTrue(rules.matches(title(movie: false, library: kids, tmdb: false)))
         XCTAssertFalse(rules.matches(title(library: movies, tmdb: false)))
     }
@@ -70,7 +70,7 @@ final class CollectionRulesTests: XCTestCase {
     }
 
     func testFileRuntimeStandsInForTMDB() {
-        let candidate = CollectionCandidate(libraryID: movies, isMovie: true, year: nil, details: nil, runtimeMinutes: 80)
+        let candidate = CollectionCandidate(library: movies, isMovie: true, year: nil, details: nil, runtimeMinutes: 80)
         XCTAssertTrue(CollectionFilter.maximumRuntime(90).matches(candidate))
     }
 

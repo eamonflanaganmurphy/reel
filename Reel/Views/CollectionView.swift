@@ -154,16 +154,17 @@ struct CollectionView: View {
     /// may be thousands.
     private func gather() async {
         let movies = movies, shows = shows, collection = collection
+        let folders = Dictionary(settings.libraries.map { ($0.id, $0.path) }, uniquingKeysWith: { a, _ in a })
         let movieDetails = await decodeDetails(movies.map(\.detailsJSON))
         let showDetails = await decodeDetails(shows.map(\.detailsJSON))
         guard !Task.isCancelled else { return }
         var members: [Member] = []
         for (movie, details) in zip(movies, movieDetails)
-        where movie.modelContext != nil && collection.contains(path: movie.path, candidate: movie.collectionCandidate(details: details)) {
+        where movie.modelContext != nil && collection.contains(path: movie.path, candidate: movie.collectionCandidate(details: details, library: folders[movie.libraryID] ?? "")) {
             members.append(.movie(movie))
         }
         for (show, details) in zip(shows, showDetails)
-        where show.modelContext != nil && collection.contains(path: show.path, candidate: show.collectionCandidate(details: details)) {
+        where show.modelContext != nil && collection.contains(path: show.path, candidate: show.collectionCandidate(details: details, library: folders[show.libraryID] ?? "")) {
             members.append(.show(show))
         }
         self.members = members

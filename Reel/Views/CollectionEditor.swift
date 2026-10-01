@@ -61,13 +61,13 @@ struct CollectionEditor: View {
                     Text(filtersFooter)
                 }
 
-                handPicked("Added by Hand", paths: collection.added,
-                           footer: "In the collection whatever the filters say. Swipe to take one off this list.") {
-                    collection.added.remove($0)
+                handPicked("Added by Hand", paths: collection.picked(true),
+                           footer: "In the collection whatever the filters say. Swipe to let the filters decide again.") {
+                    collection.set($0, included: nil)
                 }
-                handPicked("Removed by Hand", paths: collection.removed,
+                handPicked("Removed by Hand", paths: collection.picked(false),
                            footer: "Kept out whatever the filters say. Swipe to let the filters decide again.") {
-                    collection.removed.remove($0)
+                    collection.set($0, included: nil)
                 }
 
                 if let onDelete {
@@ -123,7 +123,7 @@ struct CollectionEditor: View {
     }
 
     @ViewBuilder
-    private func handPicked(_ title: String, paths: Set<String>, footer: String, remove: @escaping (String) -> Void) -> some View {
+    private func handPicked(_ title: String, paths: [String], footer: String, remove: @escaping (String) -> Void) -> some View {
         if !paths.isEmpty {
             let names = titlesByPath
             let rows = paths.sorted { (names[$0] ?? $0) < (names[$1] ?? $1) }
@@ -160,8 +160,8 @@ struct CollectionEditor: View {
 
     private func summary(_ filter: CollectionFilter) -> String {
         switch filter {
-        case .libraries(let ids):
-            return ids.isEmpty ? "None chosen" : FilterEditor.libraryNames(ids, in: settings.libraries).joined(separator: ", ")
+        case .libraries(let folders):
+            return folders.isEmpty ? "None chosen" : FilterEditor.libraryNames(folders, in: settings.libraries).joined(separator: ", ")
         case .ageRatings(let set):
             return set.isEmpty ? "None chosen" : FilterEditor.ordered(ratings: set).joined(separator: ", ")
         case .genres(let set):
@@ -248,15 +248,19 @@ struct FilterEditor: View {
     var body: some View {
         Form {
             switch filter {
-            case .libraries(let ids):
+            case .libraries(let folders):
                 Section {
                     ForEach(settings.libraries) { library in
-                        checkRow(library.name, systemImage: library.systemImage, on: ids.contains(library.id)) {
-                            filter = .libraries(ids.toggling(library.id))
+                        checkRow(library.name, systemImage: library.systemImage, on: folders.contains(library.path)) {
+                            filter = .libraries(folders.toggling(library.path))
                         }
                     }
+                    // Chosen on another phone, which has libraries this one doesn't.
+                    ForEach(folders.subtracting(settings.libraries.map(\.path)).sorted(), id: \.self) { folder in
+                        checkRow(folder, systemImage: "folder", on: true) { filter = .libraries(folders.toggling(folder)) }
+                    }
                 } footer: {
-                    Text("Everything in these libraries joins, with or without TMDB details.")
+                    Text("Everything in these libraries joins, with or without TMDB details. Libraries go by their folder in the share, so the filter works on every phone.")
                 }
             case .ageRatings(let ratings):
                 Section {
@@ -366,8 +370,12 @@ struct FilterEditor: View {
         }
     }
 
-    static func libraryNames(_ ids: Set<UUID>, in libraries: [LibraryConfig]) -> [String] {
-        libraries.filter { ids.contains($0.id) }.map(\.name)
+    /// Names for library folders, or the folder itself for one this phone
+    /// doesn't have as a library.
+    static func libraryNames(_ folders: Set<String>, in libraries: [LibraryConfig]) -> [String] {
+        folders.sorted().map { folder in
+            libraries.first { CollectionFilter.normalized(folder: $0.path) == CollectionFilter.normalized(folder: folder) }?.name ?? folder
+        }
     }
 }
 

@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(LibrarySync.self) private var sync
     @Environment(ProgressSync.self) private var progress
+    @Environment(CollectionSync.self) private var collectionSync
     @Environment(\.modelContext) private var context
 
     @State private var testResult: TestResult?
@@ -167,7 +168,7 @@ struct SettingsView: View {
                     }
                     .foregroundStyle(.primary)
                 }
-                .onDelete { settings.collections.remove(atOffsets: $0) }
+                .onDelete { offsets in offsets.map { settings.collections[$0].id }.forEach(settings.deleteCollection) }
                 Menu {
                     Button("Kids & Family") { editingCollection = .kidsAndFamily(libraries: settings.libraries) }
                     Button("Empty Collection") { editingCollection = CollectionConfig(name: "", rules: CollectionRules()) }
@@ -177,7 +178,12 @@ struct SettingsView: View {
             } header: {
                 Text("Collections")
             } footer: {
-                Text("A collection gathers movies and shows from any library into a tab of its own, by filters such as age rating and genre. Add or remove a title by hand from the ••• menu on its page.")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("A collection gathers movies and shows from any library into a tab of its own, by filters such as age rating and genre. Add or remove a title by hand from the ••• menu on its page. Collections are saved in the hidden .reel folder on the share, so every phone running Reel has the same ones.")
+                    if let failure = collectionSync.failure {
+                        Text("Couldn't sync collections: \(failure)").foregroundStyle(.orange)
+                    }
+                }
             }
 
             Section {

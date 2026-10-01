@@ -6,6 +6,7 @@ struct RootView: View {
     @Environment(LibrarySync.self) private var sync
     @Environment(PlaybackCenter.self) private var playback
     @Environment(ProgressSync.self) private var progress
+    @Environment(CollectionSync.self) private var collections
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
 
@@ -52,7 +53,11 @@ struct RootView: View {
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
             progress.start(settings: settings, context: context)
-            if phase == .background { progress.pushNow() }
+            collections.start(settings: settings)
+            if phase == .background {
+                progress.pushNow()
+                collections.pushNow()
+            }
             guard phase == .active else { return }
             // iOS reclaims a suspended app's sockets, so check the session
             // before trusting it again.
@@ -62,10 +67,11 @@ struct RootView: View {
         .onChange(of: sync.isRunning) { wasRunning, running in
             // After a scan, which may have added videos other installs have
             // progress for. Waiting also keeps the two off the router at once.
-            if wasRunning, !running { Task { await progress.pull() } }
+            if wasRunning, !running { Task { await pullShared() } }
         }
         .onChange(of: playback.session != nil) { _, playing in
             progress.playing = playing
+            collections.playing = playing
             // A scan skipped while the video played.
             if !playing, scenePhase == .active { catchUp() }
         }
@@ -88,6 +94,13 @@ struct RootView: View {
             .filter(settings.showsTab).map(\.uuidString)
     }
 
+    /// Watch progress and collections from the other installs, one after
+    /// the other to keep the router to one thing at a time.
+    private func pullShared() async {
+        await progress.pull()
+        await collections.pull()
+    }
+
     /// Picks up new downloads, at most every 15 minutes, and otherwise
     /// anything watched on another install. Never while a video plays: the
     /// router struggles with a scan and a stream at once, and a scan can
@@ -95,7 +108,7 @@ struct RootView: View {
     private func catchUp() {
         guard settings.isConfigured, playback.session == nil else { return }
         if let last = sync.lastSync, Date().timeIntervalSince(last) < 15 * 60 {
-            Task { await progress.pull() }
+            Task { await pullShared() }
         } else {
             Task { await sync.run(settings: settings, context: context) }
         }

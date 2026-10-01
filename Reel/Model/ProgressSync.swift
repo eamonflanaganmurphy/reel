@@ -27,15 +27,7 @@ final class ProgressSync {
         didSet { if !playing, dirty { schedulePush(after: 1) } }
     }
 
-    /// This install's file on the share. Kept for good, so it keeps writing
-    /// the same file rather than leaving a new one per launch.
-    private let device: String = {
-        let key = "progressDeviceID"
-        if let id = UserDefaults.standard.string(forKey: key) { return id }
-        let id = UUID().uuidString
-        UserDefaults.standard.set(id, forKey: key)
-        return id
-    }()
+    private let device = InstallID.value
 
     private var dirty = false
     private var pending: Task<Void, Never>?
@@ -140,11 +132,23 @@ final class ProgressSync {
     }
 }
 
+/// Names this install's files on the share. Kept for good, so it keeps
+/// writing the same files rather than leaving new ones per launch.
+enum InstallID {
+    static let value: String = {
+        let key = "progressDeviceID"
+        if let id = UserDefaults.standard.string(forKey: key) { return id }
+        let id = UUID().uuidString
+        UserDefaults.standard.set(id, forKey: key)
+        return id
+    }()
+}
+
 /// Extra time in the background, handed back when the work is done or, if
 /// the share is too slow to answer, when iOS says time is up. Holding on past
 /// that gets the app killed.
 @MainActor
-private final class BackgroundTask {
+final class BackgroundTask {
     private var id = UIBackgroundTaskIdentifier.invalid
 
     init(name: String) {
