@@ -14,9 +14,7 @@ struct CollectionEditor: View {
     @Query private var shows: [Show]
     @State private var path: [Int] = []
     @State private var confirmingDelete = false
-    /// Every age rating and genre in the library, to pick from.
-    @State private var ratingsFound: [String] = []
-    @State private var genresFound: [String] = []
+    @State private var found = FoundValues()
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -86,7 +84,7 @@ struct CollectionEditor: View {
             }
             .navigationDestination(for: Int.self) { i in
                 if collection.rules.filters.indices.contains(i) {
-                    FilterEditor(filter: $collection.rules.filters[i], ratingsFound: ratingsFound, genresFound: genresFound)
+                    FilterEditor(filter: $collection.rules.filters[i], found: found)
                 }
             }
             .navigationTitle(collection.name.isEmpty ? "New Collection" : collection.name)
@@ -154,8 +152,9 @@ struct CollectionEditor: View {
 
     private func findValues() async {
         let details = await decodeDetails(movies.map(\.detailsJSON) + shows.map(\.detailsJSON))
-        ratingsFound = FilterEditor.ordered(ratings: Set(details.compactMap { $0?.certification }.filter { !$0.isEmpty }))
-        genresFound = Set(details.flatMap { $0?.genres ?? [] }).sorted()
+        found.ratings = FilterEditor.ordered(ratings: Set(details.compactMap { $0?.certification }.filter { !$0.isEmpty }))
+        found.genres = Set(details.flatMap { $0?.genres ?? [] }).sorted()
+        found.loaded = true
     }
 
     private func summary(_ filter: CollectionFilter) -> String {
@@ -181,6 +180,15 @@ struct CollectionEditor: View {
             return formatDuration(seconds: Double(minutes) * 60) + " or shorter"
         }
     }
+}
+
+/// Every age rating and genre in the library, to pick from. A class, so a
+/// filter page already open fills in when they arrive.
+@Observable
+final class FoundValues {
+    var ratings: [String] = []
+    var genres: [String] = []
+    var loaded = false
 }
 
 /// The sorts of filter there are, for Add Filter and headings.
@@ -237,35 +245,45 @@ extension CollectionFilter {
 }
 
 /// One filter's values.
+///
+/// Works on its own copy, written back on each change: a page pushed with
+/// `navigationDestination` isn't redrawn when the editor's state changes,
+/// so reading the filter through the binding left taps unseen.
 struct FilterEditor: View {
     @Binding var filter: CollectionFilter
-    let ratingsFound: [String]
-    let genresFound: [String]
+    let found: FoundValues
 
     @Environment(AppSettings.self) private var settings
+    @State private var draft: CollectionFilter
     @State private var newRating = ""
+
+    init(filter: Binding<CollectionFilter>, found: FoundValues) {
+        _filter = filter
+        self.found = found
+        _draft = State(initialValue: filter.wrappedValue)
+    }
 
     var body: some View {
         Form {
-            switch filter {
+            switch draft {
             case .libraries(let folders):
                 Section {
                     ForEach(settings.libraries) { library in
                         checkRow(library.name, systemImage: library.systemImage, on: folders.contains(library.path)) {
-                            filter = .libraries(folders.toggling(library.path))
+                            draft = .libraries(folders.toggling(library.path))
                         }
                     }
                     // Chosen on another phone, which has libraries this one doesn't.
                     ForEach(folders.subtracting(settings.libraries.map(\.path)).sorted(), id: \.self) { folder in
-                        checkRow(folder, systemImage: "folder", on: true) { filter = .libraries(folders.toggling(folder)) }
+                        checkRow(folder, systemImage: "folder", on: true) { draft = .libraries(folders.toggling(folder)) }
                     }
                 } footer: {
                     Text("Everything in these libraries joins, with or without TMDB details. Libraries go by their folder in the share, so the filter works on every phone.")
                 }
             case .ageRatings(let ratings):
                 Section {
-                    ForEach(Self.ordered(ratings: ratings.union(ratingsFound)), id: \.self) { rating in
-                        checkRow(rating, on: ratings.contains(rating)) { filter = .ageRatings(ratings.toggling(rating)) }
+                    ForEach(Self.ordered(ratings: ratings.union(found.ratings)), id: \.self) { rating in
+                        checkRow(rating, on: ratings.contains(rating)) { draft = .ageRatings(ratings.toggling(rating)) }
                     }
                     HStack {
                         TextField("Another rating, e.g. 12A", text: $newRating)
@@ -278,21 +296,21 @@ struct FilterEditor: View {
                     Text("The ratings TMDB gives the titles in your library. Titles without one don't match.")
                 }
             case .genres(let genres):
-                genreList(genres, footer: "Titles in any of these genres join.") { filter = .genres($0) }
+                genreList(genres, footer: "Titles in any of these genres join.") { draft = .genres($0) }
             case .notGenres(let genres):
                 genreList(genres, footer: "Titles in any of these genres are kept out, however the other filters combine.") {
-                    filter = .notGenres($0)
+                    draft = .notGenres($0)
                 }
             case .years(let from, let to):
                 Section {
-                    yearField("From", value: from) { filter = .years(from: $0, to: to) }
-                    yearField("To", value: to) { filter = .years(from: from, to: $0) }
+                    yearField("From", value: from) { draft = .years(from: $0, to: to) }
+                    yearField("To", value: to) { draft = .years(from: from, to: $0) }
                 } footer: {
                     Text("Leave either empty for no limit that way.")
                 }
             case .minimumRating(let rating):
                 Section {
-                    Stepper(value: Binding(get: { rating }, set: { filter = .minimumRating($0) }), in: 0...10, step: 0.5) {
+                    Stepper(value: Binding(get: { rating }, set: { draft = .minimumRating($0) }), in: 0...10, step: 0.5) {
                         Text("★ \(rating.formatted(.number.precision(.fractionLength(1)))) or higher")
                     }
                 } footer: {
@@ -300,7 +318,7 @@ struct FilterEditor: View {
                 }
             case .maximumRuntime(let minutes):
                 Section {
-                    Stepper(value: Binding(get: { minutes }, set: { filter = .maximumRuntime($0) }), in: 10...300, step: 5) {
+                    Stepper(value: Binding(get: { minutes }, set: { draft = .maximumRuntime($0) }), in: 10...300, step: 5) {
                         Text(formatDuration(seconds: Double(minutes) * 60) + " or shorter")
                     }
                 } footer: {
@@ -308,23 +326,26 @@ struct FilterEditor: View {
                 }
             }
         }
-        .navigationTitle(filter.kind.name)
+        .navigationTitle(draft.kind.name)
+        .onChange(of: draft) { _, new in filter = new }
         .navigationBarTitleDisplayMode(.inline)
     }
 
     private func addRating() {
         let rating = newRating.trimmingCharacters(in: .whitespaces).uppercased()
-        guard !rating.isEmpty, case .ageRatings(let ratings) = filter else { return }
-        filter = .ageRatings(ratings.union([rating]))
+        guard !rating.isEmpty, case .ageRatings(let ratings) = draft else { return }
+        draft = .ageRatings(ratings.union([rating]))
         newRating = ""
     }
 
     private func genreList(_ genres: Set<String>, footer: String, set: @escaping (Set<String>) -> Void) -> some View {
         Section {
-            if genresFound.isEmpty && genres.isEmpty {
+            if !found.loaded {
+                ProgressView().frame(maxWidth: .infinity)
+            } else if found.genres.isEmpty && genres.isEmpty {
                 Text("No genres yet. They come from TMDB during a scan.").foregroundStyle(.secondary)
             }
-            ForEach(genres.union(genresFound).sorted(), id: \.self) { genre in
+            ForEach(genres.union(found.genres).sorted(), id: \.self) { genre in
                 checkRow(genre, on: genres.contains(genre)) { set(genres.toggling(genre)) }
             }
         } footer: {

@@ -43,6 +43,31 @@ extension CollectionConfig {
     }
 }
 
+/// A library's or collection's tab.
+enum TabItem: Identifiable {
+    case collection(CollectionConfig)
+    case library(LibraryConfig)
+
+    var id: UUID {
+        switch self {
+        case .collection(let c): c.id
+        case .library(let l): l.id
+        }
+    }
+    var name: String {
+        switch self {
+        case .collection(let c): c.name
+        case .library(let l): l.name
+        }
+    }
+    var systemImage: String {
+        switch self {
+        case .collection: "square.stack"
+        case .library(let l): l.systemImage
+        }
+    }
+}
+
 extension Notification.Name {
     /// Posted when collections are changed on this device, to share them.
     static let collectionsChanged = Notification.Name("collectionsChanged")
@@ -80,6 +105,10 @@ final class AppSettings {
     var hiddenTabs: Set<UUID> {
         didSet { defaults.set(hiddenTabs.map(\.uuidString), forKey: "hiddenTabs") }
     }
+    /// The order of the tabs after Home, as arranged on this phone. See `tabs`.
+    private(set) var tabOrder: [UUID] {
+        didSet { defaults.set(tabOrder.map(\.uuidString), forKey: "tabOrder") }
+    }
     /// Frames taken from the videos go to the share as well as this device,
     /// and frames already there are used, so each is only taken once for
     /// every phone. Off keeps them on this device only. See `SharedFrames`.
@@ -107,6 +136,7 @@ final class AppSettings {
         self.libraries = libraries
         framesOnShare = defaults.object(forKey: "framesOnShare") as? Bool ?? true
         hiddenTabs = Set((defaults.stringArray(forKey: "hiddenTabs") ?? []).compactMap(UUID.init(uuidString:)))
+        tabOrder = (defaults.stringArray(forKey: "tabOrder") ?? []).compactMap(UUID.init(uuidString:))
         deletedCollections = defaults.data(forKey: "deletedCollections")
             .flatMap { try? JSONDecoder().decode([UUID: Date].self, from: $0) } ?? [:]
         // A kids collection to start with. Deleting it leaves none.
@@ -209,6 +239,23 @@ final class AppSettings {
     }
 
     var isConfigured: Bool { shareConfig.isComplete }
+
+    /// Every library's and collection's tab, shown or not, in the order
+    /// arranged. Ones never arranged (new, or synced from another phone) go
+    /// after the rest: collections, then libraries.
+    var tabs: [TabItem] {
+        let all = collections.map(TabItem.collection) + libraries.map(TabItem.library)
+        let rank = Dictionary(tabOrder.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+        return all.enumerated()
+            .sorted { (rank[$0.element.id] ?? .max, $0.offset) < (rank[$1.element.id] ?? .max, $1.offset) }
+            .map(\.element)
+    }
+
+    func moveTabs(from source: IndexSet, to destination: Int) {
+        var ids = tabs.map(\.id)
+        ids.move(fromOffsets: source, toOffset: destination)
+        tabOrder = ids
+    }
 
     func showsTab(_ id: UUID) -> Bool { !hiddenTabs.contains(id) }
 

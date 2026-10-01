@@ -20,17 +20,15 @@ struct RootView: View {
                 .tabItem { Label("Home", systemImage: "house") }
                 .tag("home")
 
-            // Next to Home, so an iPhone's tab bar keeps them out of More.
-            ForEach(settings.collections.filter { settings.showsTab($0.id) }) { collection in
-                NavigationStack { CollectionView(collection: collection) }
-                    .tabItem { Label(collection.name, systemImage: "square.stack") }
-                    .tag(collection.id.uuidString)
-            }
-
-            ForEach(settings.libraries.filter { settings.showsTab($0.id) }) { library in
-                NavigationStack { LibraryView(library: library) }
-                    .tabItem { Label(library.name, systemImage: library.systemImage) }
-                    .tag(library.id.uuidString)
+            ForEach(settings.tabs.filter { settings.showsTab($0.id) }) { item in
+                NavigationStack {
+                    switch item {
+                    case .collection(let collection): CollectionView(collection: collection)
+                    case .library(let library): LibraryView(library: library)
+                    }
+                }
+                .tabItem { Label(item.name, systemImage: item.systemImage) }
+                .tag(item.id.uuidString)
             }
         }
         .fullScreenCover(item: $playback.session) { session in
@@ -90,8 +88,7 @@ struct RootView: View {
     }
 
     private var visibleTabs: [String] {
-        ["home"] + (settings.collections.map(\.id) + settings.libraries.map(\.id))
-            .filter(settings.showsTab).map(\.uuidString)
+        ["home"] + settings.tabs.map(\.id).filter(settings.showsTab).map(\.uuidString)
     }
 
     /// Watch progress and collections from the other installs, one after

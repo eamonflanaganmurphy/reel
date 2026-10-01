@@ -187,18 +187,17 @@ struct SettingsView: View {
             }
 
             Section {
-                Toggle(isOn: .constant(true)) { Label("Home", systemImage: "house") }
-                    .disabled(true)
-                ForEach(settings.collections) { collection in
-                    tabToggle(collection.id, name: collection.name, systemImage: "square.stack")
+                NavigationLink {
+                    TabSettings()
+                } label: {
+                    LabeledContent {
+                        Text("\(settings.tabs.filter { settings.showsTab($0.id) }.count + 1) shown")
+                    } label: {
+                        Label("Tabs", systemImage: "menubar.rectangle")
+                    }
                 }
-                ForEach(settings.libraries) { library in
-                    tabToggle(library.id, name: library.name, systemImage: library.systemImage)
-                }
-            } header: {
-                Text("Tabs")
             } footer: {
-                Text("A hidden library is still scanned, and its titles still show on Home and in collections. An iPhone fits five tabs; any more go under More.")
+                Text("Choose which libraries and collections have a tab, and their order.")
             }
 
             Section {
@@ -292,12 +291,6 @@ struct SettingsView: View {
                     settings.libraries.append(saved)
                 }
             }
-        }
-    }
-
-    private func tabToggle(_ id: UUID, name: String, systemImage: String) -> some View {
-        Toggle(isOn: Binding(get: { settings.showsTab(id) }, set: { settings.setTab(id, shown: $0) })) {
-            Label(name, systemImage: systemImage)
         }
     }
 
@@ -414,5 +407,35 @@ struct LibraryEditor: View {
                 }
             }
         }
+    }
+}
+
+/// Which tabs show, and in what order. Home stays first and always shows,
+/// since Settings is reached from it.
+private struct TabSettings: View {
+    @Environment(AppSettings.self) private var settings
+
+    var body: some View {
+        List {
+            Section {
+                Toggle(isOn: .constant(true)) { Label("Home", systemImage: "house") }
+                    .disabled(true)
+                    .moveDisabled(true)
+            }
+            Section {
+                ForEach(settings.tabs) { item in
+                    Toggle(isOn: Binding(get: { settings.showsTab(item.id) }, set: { settings.setTab(item.id, shown: $0) })) {
+                        Label(item.name, systemImage: item.systemImage)
+                    }
+                }
+                .onMove(perform: settings.moveTabs)
+            } footer: {
+                Text("Drag to reorder. A hidden library is still scanned, and its titles still show on Home and in collections. An iPhone fits five tabs; any more go under More.")
+            }
+        }
+        // Always arranging, so the drag handles show without an Edit button.
+        .environment(\.editMode, .constant(.active))
+        .navigationTitle("Tabs")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

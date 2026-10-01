@@ -13,8 +13,8 @@ server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve 
   filters say. Collections are set up in Settings or from the filter button on their tab. They're kept in the hidden
   `.reel/collections` folder on the share, so every phone has the same ones: the newest name and filters win, and hand
   picks from different phones all stand. Which tabs show is up to each phone.
-- **Tabs:** Settings → Tabs shows or hides each library's and collection's tab. A hidden library is still scanned and
-  still shows on Home.
+- **Tabs:** Settings → Tabs shows or hides each library's and collection's tab and drags them into any order, on each
+  phone. Home stays first. A hidden library is still scanned and still shows on Home.
 - **Watch progress on the share:** where you got to in each video is kept in a hidden `.reel/progress` folder on
   the share, so every phone running Reel (or a reinstall) resumes in the same place and shows the same Keep Watching.
   Each install writes its own file and the newest entry wins, so the SMB login needs write access.
