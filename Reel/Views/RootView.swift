@@ -7,6 +7,7 @@ struct RootView: View {
     @Environment(PlaybackCenter.self) private var playback
     @Environment(ProgressSync.self) private var progress
     @Environment(CollectionSync.self) private var collections
+    @Environment(DownloadCenter.self) private var downloads
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
 
@@ -52,6 +53,7 @@ struct RootView: View {
         .onChange(of: scenePhase, initial: true) { _, phase in
             progress.start(settings: settings, context: context)
             collections.start(settings: settings)
+            downloads.start(settings: settings)
             if phase == .background {
                 progress.pushNow()
                 collections.pushNow()
@@ -60,12 +62,17 @@ struct RootView: View {
             // iOS reclaims a suspended app's sockets, so check the session
             // before trusting it again.
             ServerConnection.shared.invalidate()
+            downloads.resume()
             catchUp()
         }
         .onChange(of: sync.isRunning) { wasRunning, running in
             // After a scan, which may have added videos other installs have
             // progress for. Waiting also keeps the two off the router at once.
-            if wasRunning, !running { Task { await pullShared() } }
+            if wasRunning, !running {
+                // Downloads of files the scan found gone can't be played any more.
+                downloads.prune(context: context)
+                Task { await pullShared() }
+            }
         }
         .onChange(of: playback.session != nil) { _, playing in
             progress.playing = playing
@@ -73,10 +80,15 @@ struct RootView: View {
             // A scan skipped while the video played.
             if !playing, scenePhase == .active { catchUp() }
         }
-        // Frames are read from the files, so they wait while a scan or a
-        // video is already reading from the router.
-        .onChange(of: sync.isRunning || playback.session != nil, initial: true) { _, busy in
+        // Frames are read from the files, so they wait while a scan, a
+        // video or a download is already reading from the router.
+        .onChange(of: sync.isRunning || playback.session != nil || downloads.isDownloading, initial: true) { _, busy in
             FrameGrabber.shared.paused = busy
+        }
+        // Downloads wait for a scan, or a video playing from the share, but
+        // not one playing from a download.
+        .onChange(of: sync.isRunning || playback.streamingFromShare, initial: true) { _, busy in
+            downloads.paused = busy
         }
         // Frames for everything without a poster or still, taken while the
         // app is open and the router is otherwise idle. Restarted after each

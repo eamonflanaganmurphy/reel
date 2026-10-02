@@ -6,6 +6,7 @@ struct HomeView: View {
 
     @Environment(AppSettings.self) private var settings
     @Environment(LibrarySync.self) private var sync
+    @Environment(DownloadCenter.self) private var downloads
     @Environment(\.modelContext) private var context
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -40,6 +41,13 @@ struct HomeView: View {
         }
         .navigationTitle("Reel")
         .toolbar {
+            if !downloads.items.isEmpty {
+                NavigationLink { DownloadsView() } label: {
+                    Image(systemName: "arrow.down.circle")
+                        .symbolEffect(.pulse, isActive: downloads.isDownloading)
+                }
+                .accessibilityLabel("Downloads")
+            }
             Button(action: openSettings) { Image(systemName: "gearshape") }
                 .accessibilityLabel("Settings")
         }

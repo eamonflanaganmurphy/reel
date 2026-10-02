@@ -147,6 +147,9 @@ public struct ShareConfig: Codable, Hashable, Sendable {
 /// A share the app can browse, read, and keep watch progress on.
 public protocol ShareSource: FileSource, ProgressStorage {
     var config: ShareConfig { get }
+    /// Bytes `range` of a file, or fewer at its end: none at all from past
+    /// the end. Downloads read videos this way a piece at a time.
+    func read(_ path: String, range: Range<UInt64>) async throws -> Data
     /// Makes the next request check the connection is still alive (and
     /// reconnect if not), e.g. after the app has been suspended.
     func invalidate()
@@ -157,6 +160,10 @@ extension ShareSource {
     /// Whole-file read for small things: subtitles and thumbnails.
     public func read(_ path: String) async throws -> Data {
         try await read(path, maxBytes: 20_000_000)
+    }
+
+    public func read(_ path: String, maxBytes: UInt64) async throws -> Data {
+        try await read(path, range: 0..<maxBytes)
     }
 
     /// Where `replace` writes before moving the file into place. Unique to
@@ -185,6 +192,9 @@ public enum ShareError: LocalizedError {
     case notWebDAV(host: String)
     /// The https certificate isn't one iOS trusts, e.g. a NAS's self-signed one.
     case untrustedCertificate(host: String)
+    /// Asked for part of a file, the server sent all of it, so a download
+    /// can't carry on from where it stopped.
+    case noPartialReads(host: String)
 
     public var errorDescription: String? {
         switch self {
@@ -225,6 +235,8 @@ public enum ShareError: LocalizedError {
             return "\(host) answered, but not as a WebDAV server. Check the address, including its port and path."
         case .untrustedCertificate(let host):
             return "\(host)'s certificate isn't trusted by iOS. Use http:// on your own network, or give the server a real certificate."
+        case .noPartialReads(let host):
+            return "\(host) only sends whole files, so Reel can't download from it a piece at a time."
         }
     }
 

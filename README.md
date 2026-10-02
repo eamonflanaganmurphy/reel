@@ -36,6 +36,12 @@ server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve 
   it's kept on the phone and loads again whenever that video plays.
 - **iPad:** bigger posters, episodes side by side, and any orientation, Split View or Stage Manager. The player
   doesn't force landscape there, and a keyboard works: space plays and pauses, ← and → skip, Esc closes.
+- **Downloads:** the download button beside Play on a movie page, or the ••• menu (Download Season, or an episode's
+  own menu), copies the video and its subtitle files onto the device, to watch with no way to reach the share, e.g. in
+  the car. A downloaded video always plays from the device. Downloads go one at a time and wait while a scan or a video
+  streaming from the share is using the router, then carry on where they left off, as they do when Reel is reopened
+  (iOS only gives a download a few minutes once the app is put away). The Downloads button on Home lists them, with
+  what they take up, and removes them; a download's menu can also share the file, e.g. to save it in Files.
 - **Offline:** artwork from TMDB is saved on the device during scans, so the library looks the same with no
   internet, e.g. on the router's own WiFi on a plane. A scan with no internet still counts; TMDB lookups wait until
   there's a connection. Playback pauses if the headphones disconnect.
@@ -136,6 +142,7 @@ Packages/ReelCore/     no UI, builds on Linux too
   SMBFileSource        AMSMB2 wrapper
   WebDAVFileSource     WebDAV over URLSession: PROPFIND listings, ranged reads, progress writes
   TMDB                 search and season lookups
+  FileDownload         copies a file to the device a piece at a time, resuming where it stopped
 ```
 
 After editing `project.yml`, regenerate the project with `brew install xcodegen && xcodegen`.

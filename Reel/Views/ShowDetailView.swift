@@ -21,6 +21,7 @@ private struct ShowPage: View {
     @Environment(AppSettings.self) private var settings
     @Query(sort: \Show.updatedAt, order: .reverse) private var shows: [Show]
     @Environment(PlaybackCenter.self) private var playback
+    @Environment(DownloadCenter.self) private var downloads
     @Environment(\.horizontalSizeClass) private var sizeClass
     /// Chosen when the page opens, then only by the user, so marking a
     /// season watched doesn't jump the page to the next one.
@@ -113,6 +114,18 @@ private struct ShowPage: View {
                     episodes.forEach { $0.setWatched(false) }
                 } label: { Label("Mark Season as Unwatched", systemImage: "circle") }
                 CollectionMenuItems(path: show.path, candidate: show.collectionCandidate(details: details, library: settings.libraryFolder(for: show.libraryID)))
+                Section {
+                    if episodes.contains(where: { downloads.state(of: $0.path) == .notDownloaded }) {
+                        Button { downloads.download(episodes) } label: {
+                            Label("Download Season", systemImage: "arrow.down.circle")
+                        }
+                    }
+                    if episodes.contains(where: { downloads.state(of: $0.path) != .notDownloaded }) {
+                        Button(role: .destructive) { downloads.remove(episodes.map(\.path)) } label: {
+                            Label("Remove Season Downloads", systemImage: "trash")
+                        }
+                    }
+                }
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
@@ -191,9 +204,13 @@ struct EpisodeRow: View {
                     if let overview = episode.overview, !overview.isEmpty {
                         Text(overview).font(.caption).foregroundStyle(.secondary).lineLimit(expanded ? nil : 3)
                     }
-                    if let minutes = episode.runtimeMinutes {
-                        Text("\(minutes) min").font(.caption2).foregroundStyle(.tertiary)
+                    HStack(spacing: 6) {
+                        if let minutes = episode.runtimeMinutes {
+                            Text("\(minutes) min").foregroundStyle(.tertiary)
+                        }
+                        DownloadBadge(path: episode.path)
                     }
+                    .font(.caption2)
                 }
                 Spacer(minLength: 0)
             }
@@ -213,6 +230,7 @@ struct EpisodeRow: View {
                 }
             }
             Button { expanded.toggle() } label: { Label(expanded ? "Less" : "More", systemImage: "text.alignleft") }
+            Section { DownloadMenuItems(video: episode) }
         }
     }
 }

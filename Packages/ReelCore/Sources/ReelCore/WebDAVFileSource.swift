@@ -55,14 +55,35 @@ public final class WebDAVFileSource: ShareSource, Sendable {
         }
     }
 
-    public func read(_ path: String, maxBytes: UInt64) async throws -> Data {
+    public func read(_ path: String, range: Range<UInt64>) async throws -> Data {
         let path = Self.normalize(path)
-        guard maxBytes > 0 else { return Data() }
+        guard !range.isEmpty else { return Data() }
         var request = try request(path, method: "GET")
-        request.setValue("bytes=0-\(maxBytes - 1)", forHTTPHeaderField: "Range")
+        request.setValue("bytes=\(range.lowerBound)-\(range.upperBound - 1)", forHTTPHeaderField: "Range")
         let (data, status) = try await send(request)
-        guard status == 200 || status == 206 else { throw error(status: status, path: path) }
-        return data.count > maxBytes ? data.prefix(Int(maxBytes)) : data
+        guard let piece = try Self.piece(of: data, status: status, range: range, host: config.host) else {
+            throw error(status: status, path: path)
+        }
+        return piece
+    }
+
+    /// What a ranged GET's answer holds of `range`, or nil for an error
+    /// status. A server that ignores Range sends the whole file with a 200,
+    /// which only does for a read from the start. Asking from past the end
+    /// gets a 416.
+    static func piece(of data: Data, status: Int, range: Range<UInt64>, host: String) throws -> Data? {
+        switch status {
+        case 206:
+            return data.count > range.count ? data.prefix(range.count) : data
+        case 200 where range.lowerBound == 0:
+            return data.count > range.count ? data.prefix(range.count) : data
+        case 200:
+            throw ShareError.noPartialReads(host: host)
+        case 416:
+            return Data()
+        default:
+            return nil
+        }
     }
 
     /// Writes a small file, creating its folders. It goes to a temporary name

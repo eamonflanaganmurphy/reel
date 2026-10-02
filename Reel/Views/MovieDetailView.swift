@@ -69,6 +69,7 @@ private struct MoviePage: View {
                           systemImage: video.watched ? "circle" : "checkmark.circle")
                 }
                 CollectionMenuItems(path: video.path, candidate: video.collectionCandidate(details: details, library: settings.libraryFolder(for: video.libraryID)))
+                Section { DownloadMenuItems(video: video) }
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
@@ -115,6 +116,7 @@ struct PlayButtons: View {
                 Button { playback.play(video, from: 0) } label: { PlayButtonLabel(title: "Play") }
                     .buttonStyle(.borderedProminent)
             }
+            DownloadButton(video: video)
         }
         .tint(.white)
         .controlSize(.large)

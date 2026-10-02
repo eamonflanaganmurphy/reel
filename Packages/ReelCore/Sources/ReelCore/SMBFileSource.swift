@@ -161,10 +161,11 @@ public final class SMBFileSource: ShareSource, @unchecked Sendable {
         }
     }
 
-    public func read(_ path: String, maxBytes: UInt64) async throws -> Data {
+    public func read(_ path: String, range: Range<UInt64>) async throws -> Data {
         let path = Self.normalize(path)
+        guard !range.isEmpty else { return Data() }
         return try await withConnection { manager in
-            try await manager.contents(atPath: path, range: 0..<maxBytes, progress: nil)
+            try await manager.contents(atPath: path, range: range, progress: nil)
         }
     }
 
