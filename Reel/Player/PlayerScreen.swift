@@ -14,9 +14,6 @@ final class PlaybackCenter {
     }
 
     var session: Session?
-    /// Whether what's playing comes from the share rather than a download.
-    /// Downloads wait while it does, to leave the router to the video.
-    var streamingFromShare = false
 
     /// Plays from `start`, or resumes if the video is part-watched and no
     /// start is given.
@@ -39,7 +36,6 @@ struct PlayerScreen: View {
     let session: PlaybackCenter.Session
 
     @Environment(AppSettings.self) private var settings
-    @Environment(PlaybackCenter.self) private var playback
     @Environment(DownloadCenter.self) private var downloads
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -131,7 +127,6 @@ struct PlayerScreen: View {
         .onDisappear {
             saveProgress()
             controller.stop()
-            playback.streamingFromShare = false
             UIApplication.shared.isIdleTimerDisabled = false
             Orientation.request(.portrait)
         }
@@ -396,7 +391,6 @@ struct PlayerScreen: View {
         // A downloaded copy plays with or without the share.
         let downloaded = downloads.localURL(for: video.path)
         guard let url = downloaded ?? settings.shareConfig.playbackURL(for: video.path) else { return }
-        playback.streamingFromShare = downloaded == nil
         controller.load(url, startAt: seconds)
         lastSaved = Date()
         scheduleHide()

@@ -168,7 +168,7 @@ private struct DownloadList: View {
                             Button("Try Again") { downloads.resume() }.font(.footnote.weight(.semibold))
                         }
                     } else if downloads.paused {
-                        Text("Waiting while the share is busy with a scan or a video playing from it.")
+                        Text("Waiting while the share is scanned.")
                     } else {
                         Text("Keep Reel open until these finish: iOS only lets a download carry on for a few minutes once the app is put away. It picks up where it left off next time.")
                     }

@@ -85,9 +85,8 @@ struct RootView: View {
         .onChange(of: sync.isRunning || playback.session != nil || downloads.isDownloading, initial: true) { _, busy in
             FrameGrabber.shared.paused = busy
         }
-        // Downloads wait for a scan, or a video playing from the share, but
-        // not one playing from a download.
-        .onChange(of: sync.isRunning || playback.streamingFromShare, initial: true) { _, busy in
+        // Downloads wait for a scan, but carry on while a video plays.
+        .onChange(of: sync.isRunning, initial: true) { _, busy in
             downloads.paused = busy
         }
         // Frames for everything without a poster or still, taken while the

@@ -11,9 +11,9 @@ import UIKit
 /// iCloud backups.
 ///
 /// One downloads at a time, a piece at a time (see `FileDownload`), and
-/// only while nothing else is reading from the router: a scan or a video
-/// streaming from it pauses the download, which carries on from where it
-/// got to once they're done, as it does after the app has been put away.
+/// carries on while a video plays. A scan pauses the download, which picks
+/// up from where it got to once the scan is done, as it does after the app
+/// has been put away.
 @MainActor
 @Observable
 final class DownloadCenter {
@@ -54,8 +54,8 @@ final class DownloadCenter {
     /// when the app comes back to the front, or by Try Again.
     private(set) var stopReason: String?
 
-    /// Set while a scan or a video streaming from the share is using the
-    /// router. A download under way stops and carries on after.
+    /// Set while a scan is using the router. A download under way stops and
+    /// carries on after.
     var paused = false {
         didSet {
             guard paused != oldValue else { return }
