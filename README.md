@@ -38,7 +38,8 @@ server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve 
   doesn't force landscape there, and a keyboard works: space plays and pauses, ← and → skip, Esc closes.
 - **Downloads:** the download button beside Play on a movie page, or the ••• menu (Download Season, or an episode's
   own menu), copies the video and its subtitle files onto the device, to watch with no way to reach the share, e.g. in
-  the car. A downloaded video always plays from the device. Downloads go one at a time, carry on while a video plays, and
+  the car. A downloaded video always plays from the device, and stays in the library even once it's deleted from
+  the share, until the download is removed. Downloads go one at a time, carry on while a video plays, and
   wait while a scan is using the router, then carry on where they left off, as they do when Reel is reopened
   (iOS only gives a download a few minutes once the app is put away). The Downloads button on Home lists them, with
   what they take up, and removes them; a download's menu can also share the file, e.g. to save it in Files.

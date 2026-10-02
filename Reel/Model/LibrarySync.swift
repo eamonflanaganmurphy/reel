@@ -19,11 +19,16 @@ final class LibrarySync {
 
     var isRunning: Bool { if case .scanning = state { true } else { false } }
 
+    /// Videos downloaded to this device are kept when their file goes from
+    /// the share, so they can still be played. Set at launch.
+    weak var downloads: DownloadCenter?
+
     func run(settings: AppSettings, context: ModelContext) async {
         guard settings.isConfigured, !isRunning else { return }
         state = .scanning("Connecting…")
         await settings.tidyAddress()
         var problems: [String] = []
+        let downloaded = downloads?.finishedPaths ?? []
         do {
             let config = settings.shareConfig
             let source = try ServerConnection.shared.source(for: config)
@@ -49,12 +54,12 @@ final class LibrarySync {
                     continue
                 }
                 switch library.kind {
-                case .movies: applyMovies(result.movies, library: library, context: context)
-                case .shows: applyShows(result.shows, library: library, context: context)
+                case .movies: applyMovies(result.movies, library: library, keeping: downloaded, context: context)
+                case .shows: applyShows(result.shows, library: library, keeping: downloaded, context: context)
                 }
                 try context.save()
             }
-            removeDeletedLibraries(keeping: Set(settings.libraries.map(\.id)), context: context)
+            removeDeletedLibraries(keeping: Set(settings.libraries.map(\.id)), downloaded: downloaded, context: context)
             try context.save()
 
             let key = settings.tmdbKey.trimmingCharacters(in: .whitespaces)
@@ -124,7 +129,8 @@ final class LibrarySync {
 
     // MARK: Applying a scan
 
-    private func applyMovies(_ movies: [ScannedMovie], library: LibraryConfig, context: ModelContext) {
+    private func applyMovies(_ movies: [ScannedMovie], library: LibraryConfig, keeping downloaded: Set<String>,
+                             context: ModelContext) {
         let id = library.id
         let existing = (try? context.fetch(FetchDescriptor<Video>(predicate: #Predicate { $0.libraryID == id }))) ?? []
         var byPath = Dictionary(existing.map { ($0.path, $0) }, uniquingKeysWith: { a, _ in a })
@@ -146,10 +152,11 @@ final class LibrarySync {
             apply(movie.video, to: video)
         }
         // Whatever is left was deleted from the share.
-        for gone in byPath.values { context.delete(gone) }
+        for gone in byPath.values where !downloaded.contains(gone.path) { context.delete(gone) }
     }
 
-    private func applyShows(_ shows: [ScannedShow], library: LibraryConfig, context: ModelContext) {
+    private func applyShows(_ shows: [ScannedShow], library: LibraryConfig, keeping downloaded: Set<String>,
+                            context: ModelContext) {
         let id = library.id
         let existing = (try? context.fetch(FetchDescriptor<Show>(predicate: #Predicate { $0.libraryID == id }))) ?? []
         var byPath = Dictionary(existing.map { ($0.path, $0) }, uniquingKeysWith: { a, _ in a })
@@ -191,14 +198,25 @@ final class LibrarySync {
                 if let thumb = ep.video.thumbnailPath { video.posterRef = "smb:" + thumb }
                 apply(ep.video, to: video)
             }
-            for gone in episodesByPath.values { context.delete(gone) }
+            for gone in episodesByPath.values where !downloaded.contains(gone.path) { context.delete(gone) }
 
             // YouTube channels have no poster; the first thumbnail stands in.
             if show.posterRef == nil, !library.useTMDB {
                 show.posterRef = scanned.episodes.lazy.compactMap(\.video.thumbnailPath).first.map { "smb:" + $0 }
             }
         }
-        for gone in byPath.values { context.delete(gone) }
+        for gone in byPath.values { delete(gone, keeping: downloaded, context: context) }
+    }
+
+    /// Deletes a show that's gone from the share, unless episodes of it are
+    /// downloaded: then it stays with just those.
+    private func delete(_ show: Show, keeping downloaded: Set<String>, context: ModelContext) {
+        let kept = show.episodes.filter { downloaded.contains($0.path) }
+        if kept.isEmpty {
+            context.delete(show)
+        } else {
+            for episode in show.episodes where !downloaded.contains(episode.path) { context.delete(episode) }
+        }
     }
 
     private func apply(_ scanned: ScannedVideo, to video: Video) {
@@ -206,11 +224,12 @@ final class LibrarySync {
         if video.subtitles != scanned.subtitles { video.subtitles = scanned.subtitles }
     }
 
-    private func removeDeletedLibraries(keeping ids: Set<UUID>, context: ModelContext) {
+    private func removeDeletedLibraries(keeping ids: Set<UUID>, downloaded: Set<String>, context: ModelContext) {
         for show in (try? context.fetch(FetchDescriptor<Show>())) ?? [] where !ids.contains(show.libraryID) {
-            context.delete(show)
+            delete(show, keeping: downloaded, context: context)
         }
-        for video in (try? context.fetch(FetchDescriptor<Video>())) ?? [] where !ids.contains(video.libraryID) && video.show == nil {
+        for video in (try? context.fetch(FetchDescriptor<Video>())) ?? []
+        where !ids.contains(video.libraryID) && video.show == nil && !downloaded.contains(video.path) {
             context.delete(video)
         }
     }

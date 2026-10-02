@@ -65,6 +65,10 @@ final class DownloadCenter {
 
     var isDownloading: Bool { current != nil }
 
+    /// Paths of the videos downloaded in full, which scans keep in the
+    /// library even once they're gone from the share.
+    var finishedPaths: Set<String> { Set(items.filter(\.finished).map(\.path)) }
+
     /// Bytes on this device in finished downloads.
     var bytesOnDevice: Int64 { items.filter(\.finished).reduce(0) { $0 + $1.size } }
 
@@ -172,12 +176,14 @@ final class DownloadCenter {
         remove(items.map(\.path))
     }
 
-    /// Drops downloads of videos a scan found gone from the share, which
-    /// there's no longer a way to play.
+    /// Drops unfinished downloads of videos a scan found gone from the
+    /// share, which can't be finished now. Finished ones stay, and so do
+    /// their videos in the library: see `LibrarySync.downloads`.
     func prune(context: ModelContext) {
-        guard !items.isEmpty, let videos = try? context.fetch(FetchDescriptor<Video>()) else { return }
-        let onShare = Set(videos.map(\.path))
-        remove(items.map(\.path).filter { !onShare.contains($0) })
+        guard items.contains(where: { !$0.finished }),
+              let videos = try? context.fetch(FetchDescriptor<Video>()) else { return }
+        let inLibrary = Set(videos.map(\.path))
+        remove(items.filter { !$0.finished && !inLibrary.contains($0.path) }.map(\.path))
     }
 
     // MARK: Downloading

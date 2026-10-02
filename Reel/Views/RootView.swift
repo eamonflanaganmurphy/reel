@@ -54,6 +54,7 @@ struct RootView: View {
             progress.start(settings: settings, context: context)
             collections.start(settings: settings)
             downloads.start(settings: settings)
+            sync.downloads = downloads
             if phase == .background {
                 progress.pushNow()
                 collections.pushNow()
@@ -69,7 +70,7 @@ struct RootView: View {
             // After a scan, which may have added videos other installs have
             // progress for. Waiting also keeps the two off the router at once.
             if wasRunning, !running {
-                // Downloads of files the scan found gone can't be played any more.
+                // Downloads of files the scan found gone can't be finished.
                 downloads.prune(context: context)
                 Task { await pullShared() }
             }
