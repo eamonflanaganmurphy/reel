@@ -34,7 +34,7 @@ final class ProgressSync {
     /// goes once it's back, even if the app was closed in between. On disk
     /// it's only cleared once a write has gone through (see `push`), so the
     /// app being killed mid-write doesn't lose it.
-    private var dirty = UserDefaults.standard.bool(forKey: Self.unsentKey) {
+    private var dirty = UserDefaults.standard.bool(forKey: ProgressSync.unsentKey) {
         didSet { if dirty, !oldValue { UserDefaults.standard.set(true, forKey: Self.unsentKey) } }
     }
     private static let unsentKey = "progressUnsent"
