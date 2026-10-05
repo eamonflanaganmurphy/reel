@@ -34,7 +34,8 @@ server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve 
 - **Playback:** resume and watch progress, autoplay of the next episode, audio and subtitle track choice. Sidecar `.srt` files from Bazarr are picked up automatically.
   Video from the share is read up to 256 MB ahead (minutes of 1080p) in the background, so a dropout doesn't interrupt
   it, while starting and scrubbing only wait for three seconds' worth; if the share goes quiet for
-  longer, Reel opens the file again where it got to, retrying for two minutes before it says the connection is lost.
+  longer, Reel opens the file again where it got to, retrying for two minutes before it says the connection is lost
+  (half a minute for one that hasn't started, e.g. not downloaded and away from the share).
   The lock screen, Control Center and headphone or AirPods controls play, pause and skip.
   The audio and subtitle tracks picked for a video, streamed or downloaded, are remembered on the phone and picked
   again next time; an episode not played yet gets the ones last picked for its show, or the same language.
@@ -46,12 +47,18 @@ server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve 
   on a movie's poster, an episode or a Keep Watching card copies the video and its subtitle files onto the device, to watch with no way to reach the share, e.g. in
   the car. A downloaded video always plays from the device, and stays in the library even once it's deleted from
   the share, until the download is removed. Up to four run at once, each over its own connection,
-  carry on while a video plays, and wait while a scan is using the router, then carry on where they left off, as they do when Reel is reopened
-  (iOS only gives a download a few minutes once the app is put away). The Downloads button on Home lists them, with
+  carry on while a video plays, and wait while a scan is reading the router (not while it's fetching from TMDB), then carry on where they left off, as they do when Reel is reopened
+  (iOS only gives a download a few minutes once the app is put away). A download is checked against the file's size
+  on the share before it counts as done, and its subtitles must come too, so nothing turns up cut short away from the
+  share. Its pictures are saved when it's added, and a video with none gets its thumbnail from the download itself.
+  After a downloaded episode, autoplay goes on to the next one if the share is in reach, and otherwise to the next
+  downloaded one. The Downloads button on Home lists them, with
   what they take up, and removes them; a download's menu can also share the file, e.g. to save it in Files.
-- **Offline:** artwork from TMDB is saved on the device during scans, so the library looks the same with no
-  internet, e.g. on the router's own WiFi on a plane. A scan with no internet still counts; TMDB lookups wait until
-  there's a connection. Playback pauses if the headphones disconnect.
+- **Offline:** artwork from TMDB (posters, backdrops, title logos and cast photos) is saved on the device during
+  scans, so the library looks the same with no internet, e.g. on the router's own WiFi on a plane, or a plane's WiFi
+  that wants a sign-in. A scan with no internet still counts; TMDB lookups wait until there's a connection. Watch
+  progress made away from the share goes to it once it's back, even if Reel was closed in between. Playback pauses
+  if the headphones disconnect.
 - **Formats:** everything on Bucket_A plays: MKV/MP4/WebM/AVI, H.264/HEVC/AV1/Xvid, DTS/E-AC3/Opus, and SRT/ASS/PGS/DVD subtitles.
 
 ## Install on your iPhone (free Apple ID)
@@ -115,6 +122,8 @@ rescan.
 - Set **Address** to `192.168.8.1`, the router's LAN address, not its Tailscale one: over Tailscale the router
   encrypts every byte of video, which its CPU can't keep up with.
 - Open Reel with internet first and let a scan finish, so the artwork is saved for offline.
+- With no router on board, only downloads play: download what you'll want first, and keep Reel open until the
+  Downloads list shows them all on the device.
 - Join the router's **5 GHz** network if you have the choice. The library tops out at 15 Mbit/s, so two streams need
   about 30 Mbit/s at most.
 

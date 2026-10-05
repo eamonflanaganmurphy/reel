@@ -19,6 +19,11 @@ final class LibrarySync {
 
     var isRunning: Bool { if case .scanning = state { true } else { false } }
 
+    /// Set while the scan is reading the share itself, as opposed to TMDB,
+    /// which can take minutes the first time and doesn't touch the router.
+    /// Downloads only need to wait for this part.
+    private(set) var isReadingShare = false
+
     /// Videos downloaded to this device are kept when their file goes from
     /// the share, so they can still be played. Set at launch.
     weak var downloads: DownloadCenter?
@@ -26,6 +31,8 @@ final class LibrarySync {
     func run(settings: AppSettings, context: ModelContext) async {
         guard settings.isConfigured, !isRunning else { return }
         state = .scanning("Connecting…")
+        isReadingShare = true
+        defer { isReadingShare = false }
         await settings.tidyAddress()
         var problems: [String] = []
         let downloaded = downloads?.finishedPaths ?? []
@@ -61,6 +68,7 @@ final class LibrarySync {
             }
             removeDeletedLibraries(keeping: Set(settings.libraries.map(\.id)), downloaded: downloaded, context: context)
             try context.save()
+            isReadingShare = false
 
             let key = settings.tmdbKey.trimmingCharacters(in: .whitespaces)
             if !key.isEmpty {
@@ -69,11 +77,12 @@ final class LibrarySync {
                     try await fetchMetadata(client: client, settings: settings, context: context)
                     try await fetchDetails(client: client, context: context)
                     await saveArtwork(context: context)
-                } catch let error as URLError where ArtworkStore.isOffline(error) {
-                    // No internet, e.g. on the router's own WiFi on a plane.
-                    // The share scanned fine, so this still counts as a sync
-                    // (or every return to the app would rescan the router);
-                    // what's left is looked up next time there's a connection.
+                } catch is URLError {
+                    // No internet, e.g. on the router's own WiFi on a plane, or
+                    // a plane's WiFi wanting a sign-in. The share scanned fine,
+                    // so this still counts as a sync (or every return to the
+                    // app would rescan the router); what's left is looked up
+                    // next time there's a connection.
                     try? context.save()
                 }
             }
@@ -85,7 +94,11 @@ final class LibrarySync {
             state = problems.isEmpty ? .idle : .failed(problems.joined(separator: "\n"))
         } catch {
             try? context.save()
-            state = .failed(Self.describe(error))
+            var message = Self.describe(error)
+            if let share = error as? ShareError, case .server = share, downloads?.finishedPaths.isEmpty == false {
+                message += " Downloaded videos still play."
+            }
+            state = .failed(message)
         }
     }
 
@@ -333,17 +346,26 @@ final class LibrarySync {
     /// TMDB artwork is fetched while there's internet, so the library looks
     /// complete without it. Otherwise anything not yet scrolled past falls
     /// back to frames read from the videos on the router, which then competes
-    /// with whoever is watching. A first run is ~1,700 images, ~100 MB.
+    /// with whoever is watching. Posters and backdrops go first, then the
+    /// title logos and cast photos the movie and show pages use. A first run
+    /// is a few thousand small images, ~150 MB.
     private func saveArtwork(context: ModelContext) async {
-        var refs = Set<String>()
-        for video in (try? context.fetch(FetchDescriptor<Video>())) ?? [] {
-            refs.formUnion([video.posterRef, video.backdropRef].compactMap { $0 })
-        }
-        for show in (try? context.fetch(FetchDescriptor<Show>())) ?? [] {
-            refs.formUnion([show.posterRef, show.backdropRef].compactMap { $0 })
+        var art = Set<String>(), logos = Set<String>(), faces = Set<String>()
+        let videos = (try? context.fetch(FetchDescriptor<Video>())) ?? []
+        let shows = (try? context.fetch(FetchDescriptor<Show>())) ?? []
+        for video in videos { art.formUnion([video.posterRef, video.backdropRef].compactMap { $0 }) }
+        for show in shows { art.formUnion([show.posterRef, show.backdropRef].compactMap { $0 }) }
+        let details = await decodeDetails(videos.filter(\.isMovie).map(\.detailsJSON) + shows.map(\.detailsJSON))
+        for case let found? in details {
+            if let logo = TMDBClient.imageURL(found.logoPath) { logos.insert(logo.absoluteString) }
+            for person in found.cast {
+                // The size the cast rows show; a person's page falls back to it.
+                if let face = TMDBClient.imageURL(person.profilePath, size: "w185") { faces.insert(face.absoluteString) }
+            }
         }
         let store = ArtworkStore.shared
-        var queue = refs.filter { $0.hasPrefix("https:") && !store.isSaved($0) }.sorted()[...]
+        let wanted = { (refs: Set<String>) in refs.filter { $0.hasPrefix("https:") && !store.isSaved($0) }.sorted() }
+        var queue = (wanted(art) + wanted(logos) + wanted(faces))[...]
         let total = queue.count
         guard total > 0 else { return }
 

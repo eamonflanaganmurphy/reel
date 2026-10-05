@@ -29,7 +29,12 @@ final class ProgressSync {
 
     private let device = InstallID.value
 
-    private var dirty = false
+    /// Something here hasn't reached the share yet. Kept across launches:
+    /// progress made away from the share (on a plane, say) still goes once
+    /// it's back, even if the app was closed in between.
+    private var dirty = UserDefaults.standard.bool(forKey: "progressUnsent") {
+        didSet { if dirty != oldValue { UserDefaults.standard.set(dirty, forKey: "progressUnsent") } }
+    }
     private var pending: Task<Void, Never>?
     private var busy = false
     private var observer: NSObjectProtocol?
@@ -41,6 +46,7 @@ final class ProgressSync {
         self.context = context
         guard observer == nil else { return }
         backfill(context: context)
+        if dirty { schedulePush(after: 5) }
         observer = NotificationCenter.default.addObserver(forName: .watchProgressChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }

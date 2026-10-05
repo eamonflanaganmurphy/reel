@@ -18,6 +18,7 @@ struct SettingsView: View {
     @State private var resolving: String?
     /// Library folders found somewhere else in the share, offered as a fix.
     @State private var foundPaths: [UUID: String] = [:]
+    @State private var confirmingClearArtwork = false
 
     enum TestResult {
         case ok(String)
@@ -265,9 +266,14 @@ struct SettingsView: View {
                 }
                 .disabled(!settings.isConfigured || sync.isRunning || settings.tmdbKey.isEmpty)
 
-                Button("Clear Saved Artwork") {
-                    Task { await ArtworkStore.shared.clear() }
-                }
+                Button("Clear Saved Artwork") { confirmingClearArtwork = true }
+                    .confirmationDialog("Clear saved artwork?", isPresented: $confirmingClearArtwork, titleVisibility: .visible) {
+                        Button("Clear Saved Artwork", role: .destructive) {
+                            Task { await ArtworkStore.shared.clear() }
+                        }
+                    } message: {
+                        Text("Posters and pictures are fetched again as they're needed, which takes the internet for TMDB's. Until then, with no internet, the library shows title cards.")
+                    }
             } footer: {
                 syncFooter
             }

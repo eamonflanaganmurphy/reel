@@ -28,6 +28,40 @@ final class ServerConnection: @unchecked Sendable {
         lock.withLock { source }?.invalidate()
     }
 
+    /// Whether the share answers within `seconds`. Connecting to a router
+    /// that isn't there can take a while to fail (on a plane's own WiFi the
+    /// packets just vanish), so this gives up first.
+    func isReachable(_ config: ShareConfig, within seconds: Double) async -> Bool {
+        await withCheckedContinuation { continuation in
+            let answer = FirstAnswer(continuation)
+            Task.detached {
+                answer.give((try? await self.source(for: config).list("")) != nil)
+            }
+            Task.detached {
+                try? await Task.sleep(for: .seconds(seconds))
+                answer.give(false)
+            }
+        }
+    }
+
+    /// Resumes its continuation with whichever answer comes first.
+    private final class FirstAnswer: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Bool, Never>?
+
+        init(_ continuation: CheckedContinuation<Bool, Never>) {
+            self.continuation = continuation
+        }
+
+        func give(_ value: Bool) {
+            let waiting: CheckedContinuation<Bool, Never>? = lock.withLock {
+                defer { continuation = nil }
+                return continuation
+            }
+            waiting?.resume(returning: value)
+        }
+    }
+
     /// Copies a file from the share into Caches, e.g. a subtitle for VLC.
     func download(_ path: String, config: ShareConfig) async throws -> URL {
         let data = try await source(for: config).read(path)
@@ -237,9 +271,15 @@ actor ArtworkStore {
         }
     }
 
+    /// No way through to the internet. A plane's or hotel's WiFi that wants
+    /// you to sign in first answers https with its own certificate, which
+    /// fails the same way.
     nonisolated static func isOffline(_ error: URLError) -> Bool {
         [.notConnectedToInternet, .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .timedOut,
-         .networkConnectionLost, .dataNotAllowed, .internationalRoamingOff].contains(error.code)
+         .networkConnectionLost, .dataNotAllowed, .internationalRoamingOff, .callIsActive,
+         .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasUnknownRoot,
+         .serverCertificateHasBadDate, .serverCertificateNotYetValid, .badServerResponse,
+         .cannotLoadFromNetwork].contains(error.code)
     }
 
     /// With no internet, the router's DNS can take a long time to give up,
@@ -251,7 +291,10 @@ actor ArtworkStore {
     private static func fetch(_ ref: String, config: ShareConfig, framesOnShare: Bool) async -> Data? {
         if ref.hasPrefix("frame:") {
             let path = String(ref.dropFirst(6))
-            if framesOnShare, let data = await SharedFrameStore.shared.read(path, config: config) { return data }
+            // A downloaded video's own file is quicker than asking a share
+            // that may not be there.
+            if framesOnShare, DownloadFiles.finished(path) == nil,
+               let data = await SharedFrameStore.shared.read(path, config: config) { return data }
             return await FrameGrabber.shared.jpeg(for: path, config: config, keepOnShare: framesOnShare)
         }
         // "smb:" predates WebDAV; it means the share, whatever it's served over.

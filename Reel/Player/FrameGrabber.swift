@@ -84,12 +84,17 @@ final class FrameGrabber: NSObject {
     /// be had (or the caller stopped waiting). With `keepOnShare` it's saved
     /// to the share too, for the other phones (see `SharedFrames`).
     func jpeg(for path: String, config: ShareConfig, keepOnShare: Bool) async -> Data? {
-        guard !failed.contains(path), let url = config.playbackURL(for: path) else { return nil }
+        guard !failed.contains(path), config.playbackURL(for: path) != nil else { return nil }
         while true {
-            guard Date() >= offlineUntil else { return nil }
+            // A downloaded video gives its frame with or without the share.
+            guard DownloadFiles.finished(path) != nil || Date() >= offlineUntil else { return nil }
             await withCheckedContinuation { (turn: CheckedContinuation<Void, Never>) in queue.append(turn); pump() }
             defer { running = false; pump() }
-            guard !Task.isCancelled, Date() >= offlineUntil else { return nil }
+            // Looked for again now it's this one's turn: it may have finished
+            // downloading while it waited.
+            let local = DownloadFiles.finished(path)
+            guard !Task.isCancelled, local != nil || Date() >= offlineUntil,
+                  let url = local ?? config.playbackURL(for: path) else { return nil }
 
             let snapshot = Snapshot(url: url)
             current = snapshot
@@ -104,7 +109,9 @@ final class FrameGrabber: NSObject {
             if snapshot.interrupted { continue }
 
             guard let frame else {
-                if await shareIsReachable(path, config: config) {
+                if local != nil {
+                    failed.insert(path)
+                } else if await shareIsReachable(path, config: config) {
                     failed.insert(path)
                 } else {
                     offlineUntil = Date().addingTimeInterval(60)
@@ -112,8 +119,10 @@ final class FrameGrabber: NSObject {
                 return nil
             }
             guard let jpeg = frame.jpegData(compressionQuality: 0.8) else { return nil }
-            // Still this grab's turn, so the upload isn't alongside the next grab.
-            if keepOnShare { await SharedFrameStore.shared.save(jpeg, for: path, config: config) }
+            // Still this grab's turn, so the upload isn't alongside the next
+            // grab. One from a download may well be away from the share, where
+            // the upload would hold up the next grab until it timed out.
+            if keepOnShare, local == nil { await SharedFrameStore.shared.save(jpeg, for: path, config: config) }
             return jpeg
         }
     }

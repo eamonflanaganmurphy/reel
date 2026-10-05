@@ -523,13 +523,34 @@ struct PlayerScreen: View {
 
     private func playNextOrClose() {
         video.setWatched(true)
-        if nextVideo != nil {
-            advance(to: index + 1, markWatched: false)
-        } else if !locked {
-            close()
+        guard let nextVideo else { return endOfQueue() }
+        // Played from a download, maybe somewhere with no share (on a plane):
+        // if the next episode isn't downloaded and the share can't be
+        // reached, the next one that is downloaded plays instead of a
+        // spinner that ends in an error.
+        guard downloads.localURL(for: video.path) != nil, downloads.localURL(for: nextVideo.path) == nil else {
+            return advance(to: index + 1, markWatched: false)
         }
-        // Locked, the player stays up at the end rather than dropping a
-        // child into the library. Unlocking brings the controls back.
+        let current = index
+        let queue = session.queue
+        let config = settings.shareConfig
+        Task {
+            let reachable = await ServerConnection.shared.isReachable(config, within: 5)
+            // Closed, or moved on by hand, meanwhile.
+            guard !controller.isStopped, current == index else { return }
+            if reachable { return advance(to: current + 1, markWatched: false) }
+            if let downloaded = queue.indices.dropFirst(current + 1).first(where: { downloads.localURL(for: queue[$0].path) != nil }) {
+                advance(to: downloaded, markWatched: false)
+            } else {
+                endOfQueue()
+            }
+        }
+    }
+
+    /// Locked, the player stays up at the end rather than dropping a child
+    /// into the library. Unlocking brings the controls back.
+    private func endOfQueue() {
+        if !locked { close() }
     }
 
     private func advance(to newIndex: Int, markWatched: Bool) {

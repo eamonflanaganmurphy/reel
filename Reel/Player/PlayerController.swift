@@ -101,6 +101,12 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
     private var subtitleLabels: [Int32: String] = [:]
     private var seenSubtitleIDs: Set<Int32> = []
     private var hasStarted = false
+    /// This file has played at all, through any reopening. One that never
+    /// has is more likely out of reach (not downloaded, away from the share)
+    /// than dropping out, so it's given up on sooner.
+    private var hasEverPlayed = false
+    /// Stopped for good: the screen has closed.
+    private(set) var isStopped = false
     /// Tracks to switch to by name once they're listed: the ones remembered
     /// for the video, or the ones that were on before a reconnect. Ids can
     /// change when a file is reopened.
@@ -146,6 +152,8 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
     private static let openTimeout: TimeInterval = 25
     /// How long to keep reopening a file that's lost before giving up.
     private static let reconnectWindow: TimeInterval = 120
+    /// The same for a file that hasn't played yet.
+    private static let firstOpenWindow: TimeInterval = 30
 
     override init() {
         super.init()
@@ -200,6 +208,8 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
         restoreSubtitle = tracks?.subtitle
         reconnectAttempts = 0
         reconnectStarted = nil
+        hasEverPlayed = false
+        isStopped = false
         duration = 0
         open(startAt: seconds)
     }
@@ -357,6 +367,7 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
         reconnectWork?.cancel()
         reconnectWork = nil
         wantsToPlay = false
+        isStopped = true
         player.stopInBackground()
         clearNowPlaying()
     }
@@ -388,7 +399,7 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
         }
         let started = reconnectStarted ?? Date()
         reconnectStarted = started
-        guard Date().timeIntervalSince(started) < Self.reconnectWindow else {
+        guard Date().timeIntervalSince(started) < (hasEverPlayed ? Self.reconnectWindow : Self.firstOpenWindow) else {
             giveUp()
             return
         }
@@ -424,7 +435,9 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
         reconnectAttempts = 0
         reconnectStarted = nil
         replacePlayer()
-        errorMessage = "Lost the connection to the share. Check the server is reachable, then try again."
+        errorMessage = hasEverPlayed
+            ? "Lost the connection to the share. Check the server is reachable, then try again."
+            : "Couldn't reach the share to play this. Check you're on its network, or download the video to watch it away from the share."
         updateNowPlaying()
     }
 
@@ -524,6 +537,7 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
 
     /// The file is open and playing: hand over sidecars waiting for that.
     private func started() {
+        hasEverPlayed = true
         recovered()
         guard !hasStarted else { return }
         hasStarted = true

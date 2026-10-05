@@ -262,7 +262,10 @@ struct PersonPhoto: View {
 
     var body: some View {
         GeometryReader { geo in
+            // A bigger size falls back to the cast rows' one, which scans
+            // save for offline use.
             ArtworkFrame(ref: TMDBClient.imageURL(person.profilePath, size: size)?.absoluteString,
+                         fallbackRefs: size == "w185" ? [] : [TMDBClient.imageURL(person.profilePath, size: "w185")?.absoluteString],
                          aspectRatio: 1, fallbackTitle: Self.initials(person.name),
                          fallbackSymbol: "person.fill", cornerRadius: geo.size.width / 2)
         }

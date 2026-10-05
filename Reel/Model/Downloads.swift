@@ -81,10 +81,7 @@ final class DownloadCenter {
     private var suspended = false
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
-    private static let root: URL = {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return support.appendingPathComponent("Downloads", isDirectory: true)
-    }()
+    private static var root: URL { DownloadFiles.root }
 
     private static var index: URL { root.appendingPathComponent("index.json") }
 
@@ -158,6 +155,31 @@ final class DownloadCenter {
         guard !new.isEmpty else { return }
         items += new
         pump()
+        saveArtwork(for: videos.filter { v in new.contains { $0.path == v.path } })
+    }
+
+    /// The pictures these videos are shown with, saved now while the share
+    /// is in reach. TMDB's are saved by every scan, but thumbnails on the
+    /// share (the YouTube downloads') only once they've been on screen, and
+    /// a video with neither shows a frame, which away from the share has to
+    /// come from the download itself (see `FrameGrabber`).
+    private func saveArtwork(for videos: [Video]) {
+        guard let settings else { return }
+        var refs: [String] = []
+        for video in videos {
+            let candidates = [video.posterRef ?? video.frameRef, video.backdropRef,
+                              video.show?.posterRef, video.show?.backdropRef]
+            for case let ref? in candidates where !refs.contains(ref) { refs.append(ref) }
+        }
+        // Frames last: they wait for the downloads to finish (see
+        // `RootView`), and the rest needn't wait with them.
+        refs = refs.filter { !$0.hasPrefix("frame:") } + refs.filter { $0.hasPrefix("frame:") }
+        let config = settings.shareConfig, framesOnShare = settings.framesOnShare
+        Task.detached(priority: .utility) {
+            for ref in refs where !ArtworkStore.shared.isSaved(ref) {
+                _ = await ArtworkStore.shared.image(for: ref, config: config, framesOnShare: framesOnShare)
+            }
+        }
     }
 
     func retry(_ path: String) {
@@ -234,19 +256,38 @@ final class DownloadCenter {
             // in front of the posters and progress on the shared one.
             let source = try config.makeSource()
             defer { Task { await source.disconnect() } }
-            let size = try await FileDownload.fetch(into: partial, read: { range in
-                try await source.read(path, range: range)
-            }, progress: { [weak self] bytes in
-                await self?.update(received: bytes, of: path)
-            })
-            // Subtitles are small, and a missing one shouldn't spoil the video.
+            let fetch = {
+                try await FileDownload.fetch(into: partial, read: { range in
+                    try await source.read(path, range: range)
+                }, progress: { [weak self] bytes in
+                    await self?.update(received: bytes, of: path)
+                })
+            }
+            var size = try await fetch()
+            // A read that came back short partway looks just like the end of
+            // the file, and a cut-off movie would only show itself mid-flight.
+            // The share's listing says how big it really is.
+            let parent = (path as NSString).deletingLastPathComponent, name = (path as NSString).lastPathComponent
+            if let expected = try? await source.list(parent).first(where: { !$0.isDirectory && $0.name == name })?.size {
+                for _ in 0..<3 where size < expected { size = try await fetch() }
+                if size < expected { throw DownloadError.incomplete(got: size, expected: expected) }
+            }
+            // Subtitles are small, and a missing one shouldn't spoil the
+            // video, but losing the share partway should leave the download
+            // to finish later rather than finish without them.
             for subtitle in item.subtitles {
                 try Task.checkCancellation()
-                if let data = try? await source.read(subtitle.path) {
-                    let url = Self.subtitleFile(subtitle, of: path)
-                    try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                    try? data.write(to: url, options: .atomic)
+                let data: Data
+                do {
+                    data = try await source.read(subtitle.path)
+                } catch let error where Self.isOutOfReach(error) {
+                    throw error
+                } catch {
+                    continue
                 }
+                let url = Self.subtitleFile(subtitle, of: path)
+                try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? data.write(to: url, options: .atomic)
             }
             guard let i = items.firstIndex(where: { $0.path == path }) else { return }
             try? FileManager.default.removeItem(at: final)
@@ -316,15 +357,9 @@ final class DownloadCenter {
         try? data.write(to: Self.index, options: .atomic)
     }
 
-    private static func folder(for path: String) -> URL {
-        let digest = SHA256.hash(data: Data(path.utf8)).map { String(format: "%02x", $0) }.joined()
-        return root.appendingPathComponent(String(digest.prefix(32)), isDirectory: true)
-    }
+    private static func folder(for path: String) -> URL { DownloadFiles.folder(for: path) }
 
-    /// Named as on the share, so VLC knows the format from the extension.
-    private static func file(for item: Item) -> URL {
-        folder(for: item.path).appendingPathComponent(item.fileName)
-    }
+    private static func file(for item: Item) -> URL { DownloadFiles.file(for: item.path) }
 
     private static func subtitleFile(_ subtitle: SubtitleFile, of path: String) -> URL {
         folder(for: path).appendingPathComponent("Subtitles", isDirectory: true)
@@ -332,13 +367,42 @@ final class DownloadCenter {
     }
 }
 
+/// Where downloads are kept. Apart from `DownloadCenter` so code off the
+/// main actor can find a downloaded file too.
+enum DownloadFiles {
+    static let root: URL = {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return support.appendingPathComponent("Downloads", isDirectory: true)
+    }()
+
+    static func folder(for path: String) -> URL {
+        let digest = SHA256.hash(data: Data(path.utf8)).map { String(format: "%02x", $0) }.joined()
+        return root.appendingPathComponent(String(digest.prefix(32)), isDirectory: true)
+    }
+
+    /// Named as on the share, so VLC knows the format from the extension.
+    /// Only there once the download has finished; until then it's a ".part".
+    static func file(for path: String) -> URL {
+        folder(for: path).appendingPathComponent((path as NSString).lastPathComponent)
+    }
+
+    /// The finished download of the video at `path`, if there is one.
+    static func finished(_ path: String) -> URL? {
+        let url = file(for: path)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+}
+
 enum DownloadError: LocalizedError {
     case noSpace(needed: Int64, free: Int64)
+    case incomplete(got: Int64, expected: Int64)
 
     var errorDescription: String? {
         switch self {
         case .noSpace(let needed, let free):
             return "Not enough space: it needs \(needed.formattedFileSize) and there's \(free.formattedFileSize) free."
+        case .incomplete(let got, let expected):
+            return "The share stopped sending at \(got.formattedFileSize) of \(expected.formattedFileSize)."
         }
     }
 }
