@@ -403,7 +403,9 @@ struct PlayerScreen: View {
         // A downloaded copy plays with or without the share.
         let downloaded = downloads.localURL(for: video.path)
         guard let url = downloaded ?? settings.shareConfig.playbackURL(for: video.path) else { return }
-        controller.load(url, startAt: seconds)
+        let playing = video
+        controller.onChooseTracks = { TrackMemory.save($0, for: playing) }
+        controller.load(url, startAt: seconds, tracks: TrackMemory.choice(for: playing))
         lastSaved = Date()
         scheduleHide()
         showOnLockScreen()

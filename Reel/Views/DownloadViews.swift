@@ -270,9 +270,10 @@ private struct DownloadRow: View {
         case .downloading(let fraction):
             VStack(alignment: .leading, spacing: 3) {
                 ProgressView(value: fraction ?? 0)
+                let bytes = downloads.received[item.path] ?? 0
                 Text(item.size > 0
-                     ? "\(downloads.received.formattedFileSize) of \(item.size.formattedFileSize)"
-                     : downloads.received.formattedFileSize)
+                     ? "\(bytes.formattedFileSize) of \(item.size.formattedFileSize)"
+                     : bytes.formattedFileSize)
                     .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
             }
         case .queued:

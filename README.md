@@ -35,6 +35,8 @@ server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve 
   Video from the share is read a minute ahead, so a short dropout doesn't interrupt it; if the share goes quiet for
   longer, Reel opens the file again where it got to, retrying for two minutes before it says the connection is lost.
   The lock screen, Control Center and headphone or AirPods controls play, pause and skip.
+  The audio and subtitle tracks picked for a video, streamed or downloaded, are remembered on the phone and picked
+  again next time; an episode not played yet gets the ones last picked for its show, or the same language.
   The subtitles menu can also add a file to the playing video, from anywhere on the share or from the Files app;
   it's kept on the phone and loads again whenever that video plays.
 - **iPad:** bigger posters, episodes side by side, and any orientation, Split View or Stage Manager. The player
@@ -42,8 +44,8 @@ server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve 
 - **Downloads:** the download button beside Play on a movie page, or the ••• menu (Download Season, or an episode's
   own menu), copies the video and its subtitle files onto the device, to watch with no way to reach the share, e.g. in
   the car. A downloaded video always plays from the device, and stays in the library even once it's deleted from
-  the share, until the download is removed. Downloads go one at a time, carry on while a video plays, and
-  wait while a scan is using the router, then carry on where they left off, as they do when Reel is reopened
+  the share, until the download is removed. Up to four run at once, each over its own connection,
+  carry on while a video plays, and wait while a scan is using the router, then carry on where they left off, as they do when Reel is reopened
   (iOS only gives a download a few minutes once the app is put away). The Downloads button on Home lists them, with
   what they take up, and removes them; a download's menu can also share the file, e.g. to save it in Files.
 - **Offline:** artwork from TMDB is saved on the device during scans, so the library looks the same with no

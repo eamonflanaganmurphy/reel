@@ -10,10 +10,10 @@ import UIKit
 /// own folder under Application Support with its subtitle files, out of
 /// iCloud backups.
 ///
-/// One downloads at a time, a piece at a time (see `FileDownload`), and
-/// carries on while a video plays. A scan pauses the download, which picks
-/// up from where it got to once the scan is done, as it does after the app
-/// has been put away.
+/// Up to four run at once, each a piece at a time (see `FileDownload`)
+/// over a connection of its own, and they carry on while a video plays. A
+/// scan pauses them, and each picks up from where it got to once the scan is
+/// done, as it does after the app has been put away.
 @MainActor
 @Observable
 final class DownloadCenter {
@@ -46,24 +46,25 @@ final class DownloadCenter {
     private(set) var items: [Item] = [] {
         didSet { save() }
     }
-    /// Bytes so far of the one downloading.
-    private(set) var received: Int64 = 0
-    /// The path of the one downloading.
-    private(set) var current: String?
+    /// Bytes so far of each one downloading, by path.
+    private(set) var received: [String: Int64] = [:]
     /// Why the queue has stopped, e.g. the share is out of reach. Cleared
     /// when the app comes back to the front, or by Try Again.
     private(set) var stopReason: String?
 
-    /// Set while a scan is using the router. A download under way stops and
-    /// carries on after.
+    /// Set while a scan is using the router. Downloads under way stop and
+    /// carry on after.
     var paused = false {
         didSet {
             guard paused != oldValue else { return }
-            if paused { worker?.cancel() } else { pump() }
+            if paused { cancelAll() } else { pump() }
         }
     }
 
-    var isDownloading: Bool { current != nil }
+    var isDownloading: Bool { !workers.isEmpty }
+
+    /// How many run at once.
+    static let maxConcurrent = 4
 
     /// Paths of the videos downloaded in full, which scans keep in the
     /// library even once they're gone from the share.
@@ -73,7 +74,8 @@ final class DownloadCenter {
     var bytesOnDevice: Int64 { items.filter(\.finished).reduce(0) { $0 + $1.size } }
 
     private weak var settings: AppSettings?
-    private var worker: Task<Void, Never>?
+    /// The downloads under way, by path.
+    private var workers: [String: Task<Void, Never>] = [:]
     /// The app was put away and its time to finish in the background ran
     /// out. The queue waits for it to come back.
     private var suspended = false
@@ -119,7 +121,10 @@ final class DownloadCenter {
         guard let item = items.first(where: { $0.path == path }) else { return .notDownloaded }
         if item.finished { return .downloaded }
         if let failure = item.failure { return .failed(failure) }
-        if current == path { return .downloading(item.size > 0 ? min(1, Double(received) / Double(item.size)) : nil) }
+        if workers[path] != nil {
+            let bytes = received[path] ?? 0
+            return .downloading(item.size > 0 ? min(1, Double(bytes) / Double(item.size)) : nil)
+        }
         return .queued
     }
 
@@ -165,9 +170,9 @@ final class DownloadCenter {
     func remove(_ paths: [String]) {
         let gone = Set(paths)
         guard items.contains(where: { gone.contains($0.path) }) else { return }
-        // The one downloading stops before its next piece; it checks it's
-        // still wanted before writing anything down.
-        if let current, gone.contains(current) { worker?.cancel() }
+        // One downloading stops before its next piece; it checks it's still
+        // wanted before writing anything down.
+        for (path, worker) in workers where gone.contains(path) { worker.cancel() }
         items.removeAll { gone.contains($0.path) }
         for path in gone { try? FileManager.default.removeItem(at: Self.folder(for: path)) }
     }
@@ -189,26 +194,31 @@ final class DownloadCenter {
     // MARK: Downloading
 
     private func pump() {
-        guard worker == nil, !paused, !suspended, stopReason == nil,
-              let settings, settings.isConfigured,
-              let next = items.first(where: { !$0.finished && $0.failure == nil })
-        else {
-            if worker == nil { releaseBackgroundTime() }
+        guard !paused, !suspended, stopReason == nil, let settings, settings.isConfigured else {
+            if workers.isEmpty { releaseBackgroundTime() }
             return
         }
-        holdBackgroundTime()
         let config = settings.shareConfig
-        worker = Task {
-            await run(next, config: config)
-            worker = nil
-            pump()
+        let waiting = items.filter { !$0.finished && $0.failure == nil && workers[$0.path] == nil }
+        for next in waiting.prefix(Self.maxConcurrent - workers.count) {
+            holdBackgroundTime()
+            let path = next.path
+            workers[path] = Task {
+                await run(next, config: config)
+                workers[path] = nil
+                received[path] = nil
+                pump()
+            }
         }
+        if workers.isEmpty { releaseBackgroundTime() }
+    }
+
+    private func cancelAll() {
+        for worker in workers.values { worker.cancel() }
     }
 
     private func run(_ item: Item, config: ShareConfig) async {
-        current = item.path
-        received = 0
-        defer { current = nil }
+        received[item.path] = 0
         let path = item.path
         let folder = Self.folder(for: path)
         let final = Self.file(for: item)
@@ -220,7 +230,10 @@ final class DownloadCenter {
                 throw DownloadError.noSpace(needed: item.size - have, free: free)
             }
 
-            let source = try ServerConnection.shared.source(for: config)
+            // Its own connection, so pieces of four downloads don't queue up
+            // in front of the posters and progress on the shared one.
+            let source = try config.makeSource()
+            defer { Task { await source.disconnect() } }
             let size = try await FileDownload.fetch(into: partial, read: { range in
                 try await source.read(path, range: range)
             }, progress: { [weak self] bytes in
@@ -255,7 +268,7 @@ final class DownloadCenter {
     }
 
     private func update(received bytes: Int64, of path: String) {
-        if current == path { received = bytes }
+        if workers[path] != nil { received[path] = bytes }
     }
 
     /// Losing the server, as opposed to a problem with the one file. SMB
@@ -284,7 +297,7 @@ final class DownloadCenter {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.suspended = true
-                self.worker?.cancel()
+                self.cancelAll()
                 self.releaseBackgroundTime()
             }
         }

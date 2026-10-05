@@ -12,6 +12,41 @@ struct MediaTrack: Identifiable, Hashable {
     static let subtitlesOff = MediaTrack(id: -1, name: "Off")
 }
 
+/// An audio and subtitle track, by the names the player shows.
+struct TrackChoice: Codable, Equatable {
+    var audio: String?
+    var subtitle: String?
+}
+
+/// The tracks last picked for each video, kept on this phone, so a video
+/// (downloaded or not) plays with them again. A show also keeps its last
+/// choice, for episodes not played yet.
+enum TrackMemory {
+    private static let key = "trackChoices"
+
+    private static var all: [String: TrackChoice] {
+        get {
+            UserDefaults.standard.data(forKey: key)
+                .flatMap { try? JSONDecoder().decode([String: TrackChoice].self, from: $0) } ?? [:]
+        }
+        set {
+            UserDefaults.standard.set(try? JSONEncoder().encode(newValue), forKey: key)
+        }
+    }
+
+    static func choice(for video: Video) -> TrackChoice? {
+        let saved = all
+        return saved["video:" + video.path] ?? video.show.flatMap { saved["show:" + $0.path] }
+    }
+
+    static func save(_ choice: TrackChoice, for video: Video) {
+        var saved = all
+        saved["video:" + video.path] = choice
+        if let show = video.show { saved["show:" + show.path] = choice }
+        all = saved
+    }
+}
+
 /// Wraps VLCMediaPlayer and republishes what the controls need. VLC plays the
 /// smb:// or http(s):// URL itself, so the router just serves bytes and nothing transcodes.
 ///
@@ -66,10 +101,18 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
     private var subtitleLabels: [Int32: String] = [:]
     private var seenSubtitleIDs: Set<Int32> = []
     private var hasStarted = false
-    /// The tracks that were on before a reconnect, by name, until they're
-    /// back to pick again. Ids can change when a file is reopened.
+    /// Tracks to switch to by name once they're listed: the ones remembered
+    /// for the video, or the ones that were on before a reconnect. Ids can
+    /// change when a file is reopened.
     private var restoreAudio: String?
     private var restoreSubtitle: String?
+    /// Sidecars the user just added and switched on, by label, which count as
+    /// choosing that subtitle once VLC lists them.
+    private var chosenLabels: Set<String> = []
+
+    /// Called when the user picks an audio or subtitle track, with both
+    /// as they now are, to remember for next time.
+    var onChooseTracks: ((TrackChoice) -> Void)?
 
     /// Whether the user wants it playing, as opposed to paused. A stall only
     /// counts when it should be playing.
@@ -137,11 +180,13 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
         player.stopInBackground()
     }
 
-    func load(_ url: URL, startAt seconds: Double) {
+    /// `tracks` are switched to once the file lists them, if it has them.
+    func load(_ url: URL, startAt seconds: Double, tracks: TrackChoice? = nil) {
         self.url = url
         sidecars = []
-        restoreAudio = nil
-        restoreSubtitle = nil
+        chosenLabels = []
+        restoreAudio = tracks?.audio
+        restoreSubtitle = tracks?.subtitle
         reconnectAttempts = 0
         reconnectStarted = nil
         duration = 0
@@ -205,7 +250,10 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
 
     private func addSubtitles(_ new: [Sidecar], remember: Bool) {
         guard !new.isEmpty else { return }
-        if remember { sidecars += new }
+        if remember {
+            sidecars += new
+            chosenLabels.formUnion(new.filter(\.select).map(\.label))
+        }
         if hasStarted {
             attach(new)
         } else {
@@ -275,12 +323,21 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
         player.currentAudioTrackIndex = id
         currentAudio = id
         restoreAudio = nil
+        reportChoice()
     }
 
     func selectSubtitle(_ id: Int32) {
         player.currentVideoSubTitleIndex = id
         currentSubtitle = id
         restoreSubtitle = nil
+        reportChoice()
+    }
+
+    private func reportChoice() {
+        // One still waiting to be listed is still the choice.
+        onChooseTracks?(TrackChoice(
+            audio: restoreAudio ?? audioTracks.first { $0.id == currentAudio }?.name,
+            subtitle: restoreSubtitle ?? subtitleTracks.first { $0.id == currentSubtitle }?.name))
     }
 
     func stop() {
@@ -486,30 +543,59 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
             seenSubtitleIDs.insert(id)
             if !unmatchedLabels.isEmpty { subtitleLabels[id] = unmatchedLabels.removeFirst() }
         }
+        let chosen = subs.map(\.id).first { id in subtitleLabels[id].map { chosenLabels.contains($0) } ?? false }
         // VLC's own "Disable" entry only exists once there's a track, so
         // "Off" is always added here instead.
         subtitleTracks = [.subtitlesOff]
             + subs.map { MediaTrack(id: $0.id, name: subtitleLabels[$0.id] ?? $0.name) }
+        if let chosen, let label = subtitleLabels[chosen] {
+            // VLC switched to it as it was added.
+            chosenLabels.remove(label)
+            restoreSubtitle = nil
+            currentSubtitle = player.currentVideoSubTitleIndex
+            onChooseTracks?(TrackChoice(audio: restoreAudio ?? audioTracks.first { $0.id == currentAudio }?.name,
+                                        subtitle: label))
+        }
         restoreTracks()
     }
 
-    /// After a reconnect, the audio and subtitles that were on before.
+    /// The remembered tracks, or the ones on before a reconnect.
     private func restoreTracks() {
         guard hasStarted else { return }
-        if let name = restoreAudio, let track = audioTracks.first(where: { $0.name == name }) {
+        if let name = restoreAudio, let track = Self.match(name, in: audioTracks, closeEnough: true) {
             restoreAudio = nil
             if track.id != currentAudio {
                 player.currentAudioTrackIndex = track.id
                 currentAudio = track.id
             }
         }
-        if let name = restoreSubtitle, let track = subtitleTracks.first(where: { $0.name == name }) {
+        // A sidecar from the share can be listed a while after the rest, so
+        // only settle for the same language once they're all in.
+        let allListed = pendingSubtitles.isEmpty && unmatchedLabels.isEmpty
+        if let name = restoreSubtitle, let track = Self.match(name, in: subtitleTracks, closeEnough: allListed) {
             restoreSubtitle = nil
             if track.id != currentSubtitle {
                 player.currentVideoSubTitleIndex = track.id
                 currentSubtitle = track.id
             }
         }
+    }
+
+    /// The track called `name`, or failing that (another episode, another
+    /// release) one in the same language.
+    private static func match(_ name: String, in tracks: [MediaTrack], closeEnough: Bool) -> MediaTrack? {
+        if let exact = tracks.first(where: { $0.name == name }) { return exact }
+        guard closeEnough, name != MediaTrack.subtitlesOff.name else { return nil }
+        let language = language(of: name)
+        return tracks.first { $0.id >= 0 && Self.language(of: $0.name) == language }
+    }
+
+    /// "Track 2 - [English]" -> "english"; a sidecar's "English" -> "english".
+    private static func language(of name: String) -> String {
+        if let open = name.lastIndex(of: "["), let close = name.lastIndex(of: "]"), open < close {
+            return name[name.index(after: open)..<close].trimmingCharacters(in: .whitespaces).lowercased()
+        }
+        return name.trimmingCharacters(in: .whitespaces).lowercased()
     }
 
     private static func tracks(names: [Any], indexes: [Any]) -> [MediaTrack] {
