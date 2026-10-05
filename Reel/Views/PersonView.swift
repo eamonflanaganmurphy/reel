@@ -170,9 +170,13 @@ struct PersonView: View {
 
     private func loadProfile() async {
         let key = settings.tmdbKey.trimmingCharacters(in: .whitespaces)
-        guard let id = person.id, !key.isEmpty else { return }
-        let loaded = try? await TMDBClient(apiKey: key).person(id: id)
-        withAnimation(.easeOut(duration: 0.2)) { profile = loaded }
+        guard let id = person.id, !key.isEmpty, await InternetCheck.shared.isOnline() else { return }
+        do {
+            let loaded = try await TMDBClient(apiKey: key).person(id: id)
+            withAnimation(.easeOut(duration: 0.2)) { profile = loaded }
+        } catch {
+            await InternetCheck.shared.noteFailure(error)
+        }
     }
 
     /// TMDB's "1964-09-02", as a local date so it isn't a day out.

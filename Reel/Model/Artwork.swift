@@ -302,10 +302,16 @@ actor ArtworkStore {
             let path = String(ref.dropFirst(4))
             return try? await ServerConnection.shared.source(for: config).read(path, maxBytes: 5_000_000)
         }
-        guard let url = URL(string: ref) else { return nil }
-        guard let (data, response) = try? await URLSession.shared.data(for: request(url)),
-              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-        return data
+        // Not saved yet, and no internet: the next picture along (a frame,
+        // or a title card) straight away, rather than after a timeout.
+        guard let url = URL(string: ref), await InternetCheck.shared.isOnline() else { return nil }
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request(url))
+            return (response as? HTTPURLResponse)?.statusCode == 200 ? data : nil
+        } catch {
+            await InternetCheck.shared.noteFailure(error)
+            return nil
+        }
     }
 
     private static func fileName(for ref: String) -> String {

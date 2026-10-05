@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Observation
 import ReelCore
@@ -28,7 +29,10 @@ final class LibrarySync {
     /// the share, so they can still be played. Set at launch.
     weak var downloads: DownloadCenter?
 
-    func run(settings: AppSettings, context: ModelContext) async {
+    /// Only folders that changed since the last scan are listed again
+    /// (see `ListingCache`), unless `full`, as Scan Now in Settings is, and
+    /// as one scan a week is anyway.
+    func run(settings: AppSettings, context: ModelContext, full: Bool = false) async {
         guard settings.isConfigured, !isRunning else { return }
         state = .scanning("Connecting…")
         isReadingShare = true
@@ -39,7 +43,15 @@ final class LibrarySync {
         do {
             let config = settings.shareConfig
             let source = try ServerConnection.shared.source(for: config)
-            let scanner = LibraryScanner(source: source)
+            // Folders are listed three at a time, each over a connection of
+            // its own for SMB, which only does one request at a time.
+            let extra = config.kind == .smb ? (0..<2).compactMap { _ in try? config.makeSource() } : []
+            defer { for connection in extra { Task { await connection.disconnect() } } }
+            let pool = SourcePool(([source] + (extra.isEmpty ? [source, source] : extra)).map { $0 as any FileSource })
+            let lastFull = UserDefaults.standard.object(forKey: "lastFullScan") as? Date ?? .distantPast
+            let full = full || Date().timeIntervalSince(lastFull) > 7 * 24 * 60 * 60
+            let cache = ListingCache(base: pool, previous: full ? [:] : ScanCache.load(for: config))
+            let scanner = LibraryScanner(source: cache, concurrency: 3)
 
             for library in settings.libraries {
                 state = .scanning("Scanning \(library.name)…")
@@ -69,20 +81,28 @@ final class LibrarySync {
             removeDeletedLibraries(keeping: Set(settings.libraries.map(\.id)), downloaded: downloaded, context: context)
             try context.save()
             isReadingShare = false
+            for connection in extra { Task { await connection.disconnect() } }
+            ScanCache.save(cache.folders, for: config)
+            if full { UserDefaults.standard.set(Date(), forKey: "lastFullScan") }
 
+            // With no internet (the router's own WiFi on a plane, or a
+            // plane's WiFi wanting a sign-in) TMDB is skipped after a quick
+            // check rather than a request timing out. The share scanned fine,
+            // so this still counts as a sync (or every return to the app
+            // would rescan the router); what's left is looked up next time
+            // there's a connection.
             let key = settings.tmdbKey.trimmingCharacters(in: .whitespaces)
             if !key.isEmpty {
+                state = .scanning("Checking for internet…")
+            }
+            if !key.isEmpty, await InternetCheck.shared.isOnline() {
                 do {
                     let client = TMDBClient(apiKey: key)
                     try await fetchMetadata(client: client, settings: settings, context: context)
                     try await fetchDetails(client: client, context: context)
                     await saveArtwork(context: context)
-                } catch is URLError {
-                    // No internet, e.g. on the router's own WiFi on a plane, or
-                    // a plane's WiFi wanting a sign-in. The share scanned fine,
-                    // so this still counts as a sync (or every return to the
-                    // app would rescan the router); what's left is looked up
-                    // next time there's a connection.
+                } catch let error as URLError {
+                    await InternetCheck.shared.noteFailure(error)
                     try? context.save()
                 }
             }
@@ -249,14 +269,42 @@ final class LibrarySync {
 
     // MARK: TMDB
 
+    /// TMDB answers several requests at once about as fast as one, so
+    /// lookups run a few at a time; one by one, a first scan of a big
+    /// library took minutes. The answers are applied here, on the main actor.
+    private func concurrently<Input: Sendable, Output: Sendable>(
+        _ inputs: [Input], _ work: @escaping @Sendable (Input) async throws -> Output,
+        apply: (Output) throws -> Void
+    ) async throws {
+        try await withThrowingTaskGroup(of: Output.self) { group in
+            var waiting = inputs[...]
+            var running = 0
+            while true {
+                while running < 6, let next = waiting.popFirst() {
+                    group.addTask { try await work(next) }
+                    running += 1
+                }
+                guard let output = try await group.next() else { return }
+                running -= 1
+                try apply(output)
+            }
+        }
+    }
+
     private func fetchMetadata(client: TMDBClient, settings: AppSettings, context: ModelContext) async throws {
         let tmdbLibraries = Set(settings.libraries.filter(\.useTMDB).map(\.id))
 
         let movies = try context.fetch(FetchDescriptor<Video>(predicate: #Predicate { $0.isMovie && !$0.metadataFetched }))
             .filter { tmdbLibraries.contains($0.libraryID) }
-        for (i, movie) in movies.enumerated() {
-            state = .scanning("Fetching movie info \(i + 1) of \(movies.count)…")
-            if let hit = try await client.searchMovie(title: movie.title, year: movie.year) {
+        var done = 0
+        let movieQueries = movies.indices.map { MovieQuery(index: $0, title: movies[$0].title, year: movies[$0].year) }
+        try await concurrently(movieQueries, { query in
+            MovieAnswer(index: query.index, hit: try await client.searchMovie(title: query.title, year: query.year))
+        }) { answer in
+            let movie = movies[answer.index]
+            done += 1
+            state = .scanning("Fetching movie info \(done) of \(movies.count)…")
+            if let hit = answer.hit {
                 if movie.tmdbID != hit.id { movie.detailsJSON = nil; movie.detailsFetchedAt = nil }
                 movie.tmdbID = hit.id
                 movie.title = hit.title
@@ -266,16 +314,44 @@ final class LibrarySync {
                 movie.backdropRef = TMDBClient.imageURL(hit.backdropPath, size: "w1280")?.absoluteString
             }
             movie.metadataFetched = true
-            if i % 20 == 19 { try context.save() }
+            if done % 20 == 0 { try context.save() }
         }
         try context.save()
 
         let shows = try context.fetch(FetchDescriptor<Show>())
             .filter { tmdbLibraries.contains($0.libraryID) && (!$0.metadataFetched || $0.episodes.contains { !$0.metadataFetched }) }
-        for (i, show) in shows.enumerated() {
-            state = .scanning("Fetching TV info \(i + 1) of \(shows.count)…")
+        done = 0
+        let showQueries = shows.indices.map { i in
+            let show = shows[i]
+            return ShowQuery(index: i, search: !show.metadataFetched, title: show.title, year: show.year,
+                             country: show.country, tmdbID: show.tmdbID,
+                             seasons: Set(show.episodes.filter { !$0.metadataFetched }.map(\.season)).sorted())
+        }
+        try await concurrently(showQueries, { query in
+            var hit: TMDBShow?
+            var id = query.tmdbID
+            if query.search {
+                hit = try await client.searchShow(title: query.title, year: query.year, country: query.country)
+                if let hit { id = hit.id }
+            }
+            // A missing season (TMDB numbers it differently) shouldn't stop
+            // the rest of the library. Anything else, e.g. a network blip,
+            // leaves the episodes to be looked up next time.
+            var seasons: [Int: TMDBSeason] = [:]
+            if let id {
+                for number in query.seasons {
+                    do {
+                        seasons[number] = try await client.season(showID: id, number: number)
+                    } catch TMDBError.http(404) {}
+                }
+            }
+            return ShowAnswer(index: query.index, hit: hit, seasons: seasons)
+        }) { answer in
+            let show = shows[answer.index]
+            done += 1
+            state = .scanning("Fetching TV info \(done) of \(shows.count)…")
             if !show.metadataFetched {
-                if let hit = try await client.searchShow(title: show.title, year: show.year, country: show.country) {
+                if let hit = answer.hit {
                     if show.tmdbID != hit.id { show.detailsJSON = nil; show.detailsFetchedAt = nil }
                     show.tmdbID = hit.id
                     show.overview = hit.overview
@@ -284,24 +360,10 @@ final class LibrarySync {
                 }
                 show.metadataFetched = true
             }
-            guard let tmdbID = show.tmdbID else {
-                show.episodes.forEach { $0.metadataFetched = true }
-                continue
-            }
-            let pending = show.episodes.filter { !$0.metadataFetched }
-            for season in Set(pending.map(\.season)).sorted() {
-                // A missing season (TMDB numbers it differently) shouldn't
-                // stop the rest of the library. Anything else, e.g. a network
-                // blip, leaves the episodes to be looked up next time.
-                let details: TMDBSeason?
-                do {
-                    details = try await client.season(showID: tmdbID, number: season)
-                } catch TMDBError.http(404) {
-                    details = nil
-                }
-                let byNumber = Dictionary((details?.episodes ?? []).map { ($0.episodeNumber, $0) }, uniquingKeysWith: { a, _ in a })
-                for video in pending where video.season == season {
-                    if let n = video.episode, let ep = byNumber[n] {
+            if show.tmdbID != nil {
+                for video in show.episodes where !video.metadataFetched {
+                    let episodes = answer.seasons[video.season]?.episodes ?? []
+                    if let n = video.episode, let ep = episodes.first(where: { $0.episodeNumber == n }) {
                         if let name = ep.name, !name.isEmpty { video.title = name }
                         video.overview = ep.overview
                         video.runtimeMinutes = ep.runtime
@@ -312,9 +374,12 @@ final class LibrarySync {
                     }
                     video.metadataFetched = true
                 }
+            } else {
+                show.episodes.forEach { $0.metadataFetched = true }
             }
-            try context.save()
+            if done % 10 == 0 { try context.save() }
         }
+        try context.save()
     }
 
     /// Cast, genres and related titles for everything matched on TMDB, which
@@ -332,12 +397,18 @@ final class LibrarySync {
             state = .scanning("Fetching cast and details \(done) of \(total)…")
             if done % 20 == 0 { try context.save() }
         }
-        for movie in movies {
-            try await DetailsLoader.fetch(movie, client: client)
+        let movieIDs = movies.indices.compactMap { i in movies[i].tmdbID.map { DetailsQuery(index: i, id: $0) } }
+        try await concurrently(movieIDs, { query in
+            DetailsAnswer(query: query, details: try await DetailsLoader.details(movie: query.id, client: client))
+        }) { answer in
+            DetailsLoader.store(answer.details, in: movies[answer.query.index], id: answer.query.id)
             try step()
         }
-        for show in shows {
-            try await DetailsLoader.fetch(show, client: client)
+        let showIDs = shows.indices.compactMap { i in shows[i].tmdbID.map { DetailsQuery(index: i, id: $0) } }
+        try await concurrently(showIDs, { query in
+            DetailsAnswer(query: query, details: try await DetailsLoader.details(show: query.id, client: client))
+        }) { answer in
+            DetailsLoader.store(answer.details, in: shows[answer.query.index], id: answer.query.id)
             try step()
         }
         try context.save()
@@ -398,4 +469,50 @@ final class LibrarySync {
 
 private extension Optional<String> {
     var isBlank: Bool { self?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true }
+}
+
+// What the concurrent TMDB lookups take and give back: plain values, as the
+// models stay on the main actor.
+private struct MovieQuery: Sendable { let index: Int; let title: String; let year: Int? }
+private struct MovieAnswer: Sendable { let index: Int; let hit: TMDBMovie? }
+private struct ShowQuery: Sendable {
+    let index: Int
+    /// The show itself still needs matching, not just episodes.
+    let search: Bool
+    let title: String
+    let year: Int?
+    let country: String?
+    let tmdbID: Int?
+    /// Seasons with episodes not looked up yet.
+    let seasons: [Int]
+}
+private struct ShowAnswer: Sendable { let index: Int; let hit: TMDBShow?; let seasons: [Int: TMDBSeason] }
+private struct DetailsQuery: Sendable { let index: Int; let id: Int }
+private struct DetailsAnswer: Sendable { let query: DetailsQuery; let details: TMDBDetails? }
+
+/// Each folder's listing from the last scan, for `ListingCache`, one file per
+/// share. In Caches: losing it only makes the next scan a full one.
+enum ScanCache {
+    private static let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("ScanCache", isDirectory: true)
+
+    private static func file(for config: ShareConfig) -> URL {
+        let id = "\(config.kind.rawValue)|\(config.host)|\(config.share)"
+        let digest = SHA256.hash(data: Data(id.utf8)).map { String(format: "%02x", $0) }.joined()
+        return directory.appendingPathComponent(String(digest.prefix(32)) + ".json")
+    }
+
+    static func load(for config: ShareConfig) -> [String: ListingCache.Folder] {
+        (try? Data(contentsOf: file(for: config)))
+            .flatMap { try? JSONDecoder().decode([String: ListingCache.Folder].self, from: $0) } ?? [:]
+    }
+
+    static func save(_ folders: [String: ListingCache.Folder], for config: ShareConfig) {
+        let url = file(for: config)
+        Task.detached(priority: .utility) {
+            guard let data = try? JSONEncoder().encode(folders) else { return }
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try? data.write(to: url, options: .atomic)
+        }
+    }
 }

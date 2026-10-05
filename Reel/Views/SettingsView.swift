@@ -243,8 +243,10 @@ struct SettingsView: View {
             }
 
             Section {
+                // Every folder, not just the ones that changed, for a file
+                // replaced in place under the same name.
                 Button {
-                    Task { await sync.run(settings: settings, context: context) }
+                    Task { await sync.run(settings: settings, context: context, full: true) }
                 } label: {
                     HStack {
                         Text("Scan Now")

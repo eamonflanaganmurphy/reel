@@ -1,6 +1,6 @@
 import Foundation
 
-public struct FileEntry: Sendable, Hashable {
+public struct FileEntry: Sendable, Hashable, Codable {
     public var name: String
     /// Share-relative, no leading slash: "movies/Moana (2016)/Moana (2016).mp4"
     public var path: String
@@ -86,9 +86,14 @@ public struct LibraryScanner: Sendable {
     /// Directory depth below the library root to descend. The deepest real
     /// layout is Show/Season NA/Show - Season 2026/file.
     public var maxDepth = 4
+    /// How many movie or show folders are scanned at once. Only worth more
+    /// than one when `source` can list several folders at once, e.g. a
+    /// `SourcePool`: one SMB connection does one request at a time.
+    public var concurrency = 1
 
-    public init(source: any FileSource) {
+    public init(source: any FileSource, concurrency: Int = 1) {
         self.source = source
+        self.concurrency = max(1, concurrency)
     }
 
     public func scan(root: String, kind: LibraryKind) async throws -> ScanResult {
@@ -98,17 +103,39 @@ public struct LibraryScanner: Sendable {
         case .movies:
             // Loose files in the root are movies named by filename.
             result.movies += Self.movies(in: top, folderTitle: nil, subsDirs: [])
-            for dir in top where dir.isDirectory {
-                result.movies += try await scanMovieFolder(dir, depth: 1)
+            for found in try await each(top.filter(\.isDirectory), { try await scanMovieFolder($0, depth: 1) }) {
+                result.movies += found
             }
             result.movies.sort { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
         case .shows:
-            for dir in top where dir.isDirectory {
-                if let show = try await scanShow(dir) { result.shows.append(show) }
-            }
+            result.shows = try await each(top.filter(\.isDirectory), { try await scanShow($0) }).compactMap { $0 }
             result.shows.sort { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
         }
         return result
+    }
+
+    /// `work` on each folder, `concurrency` at a time. The results come
+    /// back in no particular order; `scan` sorts them.
+    private func each<T: Sendable>(_ dirs: [FileEntry],
+                                   _ work: @escaping @Sendable (FileEntry) async throws -> T) async throws -> [T] {
+        guard concurrency > 1 else {
+            var results: [T] = []
+            for dir in dirs { results.append(try await work(dir)) }
+            return results
+        }
+        return try await withThrowingTaskGroup(of: T.self) { group in
+            var waiting = dirs[...]
+            var results: [T] = []
+            for _ in 0..<concurrency {
+                guard let dir = waiting.popFirst() else { break }
+                group.addTask { try await work(dir) }
+            }
+            while let result = try await group.next() {
+                results.append(result)
+                if let dir = waiting.popFirst() { group.addTask { try await work(dir) } }
+            }
+            return results
+        }
     }
 
     // MARK: Movies

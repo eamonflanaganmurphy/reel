@@ -128,6 +128,13 @@ Then **Scan Now**. The first scan with TMDB takes a minute or so; after that onl
 The app rescans on its own when opened, at most every 15 minutes, and you can pull down on any screen to
 rescan.
 
+Scans list three folders at a time, each over its own connection, and only list again the folders that have
+changed since the last scan (a folder's date changes when a file is added, removed or renamed in it). Folders
+holding other folders, like a show's, are always listed, so new seasons and movies show up. **Scan Now** in
+Settings, and one scan a week, list everything, for a file replaced in place under the same name. TMDB lookups
+run six at a time. With no internet, a four-second check skips TMDB for the scan rather than each lookup
+waiting to time out, and pages and pictures don't try TMDB until there's a connection again.
+
 ## On a plane (the router's own WiFi)
 
 - Set **Address** to `192.168.8.1`, the router's LAN address, not its Tailscale one: over Tailscale the router
