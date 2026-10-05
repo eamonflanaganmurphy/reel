@@ -32,6 +32,9 @@ server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve 
   A show tries an episode still, then frames from its first three episodes; an episode with no readable frame uses the
   show's backdrop. If nothing loads at all, a title card is generated, so every show and episode has a picture.
 - **Playback:** resume and watch progress, autoplay of the next episode, audio and subtitle track choice. Sidecar `.srt` files from Bazarr are picked up automatically.
+  Video from the share is read ten seconds ahead, so a short dropout doesn't interrupt it; if the share goes quiet for
+  longer, Reel opens the file again where it got to, retrying for two minutes before it says the connection is lost.
+  The lock screen, Control Center and headphone or AirPods controls play, pause and skip.
   The subtitles menu can also add a file to the playing video, from anywhere on the share or from the Files app;
   it's kept on the phone and loads again whenever that video plays.
 - **iPad:** bigger posters, episodes side by side, and any orientation, Split View or Stage Manager. The player

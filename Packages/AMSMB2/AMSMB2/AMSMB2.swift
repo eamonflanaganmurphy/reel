@@ -52,6 +52,14 @@ public class SMB2Manager: NSObject, NSSecureCoding, Codable, NSCopying, CustomRe
         }
     }
 
+    /// Reel patch (see PATCHES.md): the session's socket has died or a
+    /// request on it was given up on. A request that fails then reports
+    /// whatever errno libsmb2 left, often not a network one, so this is how
+    /// to tell a dead session from a problem with the file.
+    public var isSessionLost: Bool {
+        connectLock.withLock { client?.isBroken ?? true }
+    }
+
     override public var debugDescription: String {
         var result = ""
         for (label, value) in customMirror.children {

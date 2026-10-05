@@ -1,6 +1,7 @@
 import AVFoundation
 import Combine
 import Foundation
+import MediaPlayer
 import UIKit
 import VLCKitSPM
 
@@ -13,17 +14,27 @@ struct MediaTrack: Identifiable, Hashable {
 
 /// Wraps VLCMediaPlayer and republishes what the controls need. VLC plays the
 /// smb:// or http(s):// URL itself, so the router just serves bytes and nothing transcodes.
+///
+/// When the share stops sending partway (the router's WiFi drops for a few
+/// seconds, say), what's buffered plays on and then the file is opened again
+/// where it got to, over and over for a while, before it's called lost.
 final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate {
-    let player = VLCMediaPlayer()
+    /// A new one for each file opened. Telling a player stuck on a stalled
+    /// share to open something else blocks until its read times out, so the
+    /// old one is stopped and let go in the background instead (see
+    /// `stopInBackground`).
+    private(set) var player = VLCMediaPlayer()
     /// Goes in the SwiftUI hierarchy. VLC draws into `drawable` inside it.
     let videoView = UIView()
     /// VLC adds a tap recognizer (for DVD menus) to its drawable's *superview*.
     /// Handing it SwiftUI's view directly let that recognizer steal every tap,
     /// so it gets a child of our own, touch-disabled container instead.
-    private let drawable = UIView()
+    private var drawable = UIView()
 
     @Published private(set) var isPlaying = false
     @Published private(set) var isBuffering = true
+    /// The share went quiet and the file is being opened again.
+    @Published private(set) var isReconnecting = false
     @Published private(set) var currentTime: Double = 0
     @Published private(set) var duration: Double = 0
     @Published private(set) var audioTracks: [MediaTrack] = []
@@ -44,22 +55,49 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
         var select = false
     }
 
+    private var url: URL?
     private var pendingSubtitles: [Sidecar] = []
+    /// Every sidecar handed over for this file, to hand over again when
+    /// it's reopened.
+    private var sidecars: [Sidecar] = []
     /// Labels of sidecars handed to VLC whose tracks haven't appeared yet.
     /// VLC opens them in order, so they're matched to new track ids in order.
     private var unmatchedLabels: [String] = []
     private var subtitleLabels: [Int32: String] = [:]
     private var seenSubtitleIDs: Set<Int32> = []
     private var hasStarted = false
+    /// The tracks that were on before a reconnect, by name, until they're
+    /// back to pick again. Ids can change when a file is reopened.
+    private var restoreAudio: String?
+    private var restoreSubtitle: String?
+
+    /// Whether the user wants it playing, as opposed to paused. A stall only
+    /// counts when it should be playing.
+    private var wantsToPlay = false
+    /// When playback last moved on, or the file was last opened.
+    private var lastProgress = Date()
+    private var watchdog: Timer?
+    private var reconnectAttempts = 0
+    private var reconnectStarted: Date?
+    private var reconnectWork: DispatchWorkItem?
+
+    /// How far ahead VLC reads a file on the share, in milliseconds. A
+    /// dropout shorter than this doesn't interrupt the picture.
+    private static let networkCaching = 10_000
+    /// No progress for this long while it should be playing, with nothing
+    /// left buffered, is taken as the share having gone quiet. VLC can
+    /// otherwise wait on a dead connection for minutes.
+    private static let stallTimeout: TimeInterval = 15
+    /// Opening a file gets longer before it counts as stuck.
+    private static let openTimeout: TimeInterval = 25
+    /// How long to keep reopening a file that's lost before giving up.
+    private static let reconnectWindow: TimeInterval = 120
 
     override init() {
         super.init()
         videoView.backgroundColor = .black
         videoView.isUserInteractionEnabled = false
-        drawable.frame = videoView.bounds
-        drawable.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        drawable.backgroundColor = .black
-        videoView.addSubview(drawable)
+        install(drawable)
         player.drawable = drawable
         player.delegate = self
         let center = NotificationCenter.default
@@ -69,36 +107,60 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
                            name: AVAudioSession.interruptionNotification, object: nil)
     }
 
+    private func install(_ view: UIView) {
+        view.frame = videoView.bounds
+        view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.backgroundColor = .black
+        videoView.addSubview(view)
+    }
+
     /// Headphones unplugged, out of Bluetooth range or taken out of the
     /// ears: pause, as every iOS player does, rather than carry on out of the
     /// speaker (on a plane, say).
     @objc private func audioRouteChanged(_ notification: Notification) {
         guard let raw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
               AVAudioSession.RouteChangeReason(rawValue: raw) == .oldDeviceUnavailable else { return }
-        DispatchQueue.main.async { [weak self] in self?.pauseIfPlaying() }
+        DispatchQueue.main.async { [weak self] in self?.pause() }
     }
 
     /// A call or an alarm took the audio. Playback waits for the user after.
     @objc private func audioInterrupted(_ notification: Notification) {
         guard let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
               AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }
-        DispatchQueue.main.async { [weak self] in self?.pauseIfPlaying() }
-    }
-
-    private func pauseIfPlaying() {
-        if player.isPlaying { player.pause() }
+        DispatchQueue.main.async { [weak self] in self?.pause() }
     }
 
     deinit {
+        watchdog?.invalidate()
+        reconnectWork?.cancel()
         player.delegate = nil
         player.stopInBackground()
     }
 
     func load(_ url: URL, startAt seconds: Double) {
+        self.url = url
+        sidecars = []
+        restoreAudio = nil
+        restoreSubtitle = nil
+        reconnectAttempts = 0
+        reconnectStarted = nil
+        duration = 0
+        open(startAt: seconds)
+    }
+
+    /// Opens `url` in a fresh player, from `seconds`.
+    private func open(startAt seconds: Double) {
+        guard let url else { return }
+        reconnectWork?.cancel()
+        reconnectWork = nil
+        replacePlayer()
+
         let media = VLCMedia(url: url)
-        // A bigger buffer than VLC's default: remote playback over the
-        // router's uplink needs the headroom.
-        media.addOption(":network-caching=3000")
+        if !url.isFileURL {
+            // Far more than VLC's default second, so the picture rides out
+            // the share going quiet for a few seconds.
+            media.addOption(":network-caching=\(Self.networkCaching)")
+        }
         if seconds > 1 { media.addOption(":start-time=\(Int(seconds))") }
         pendingSubtitles = []
         unmatchedLabels = []
@@ -109,20 +171,45 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
         currentSubtitle = -1
         hasStarted = false
         errorMessage = nil
+        // The length stays put through a reconnect, so the bar doesn't jump.
         currentTime = seconds
-        duration = 0
         isBuffering = true
+        wantsToPlay = true
+        lastProgress = Date()
         player.media = media
         player.play()
+        startWatchdog()
+        // Sidecars from before a reconnect go back on once it's open.
+        addSubtitles(sidecars.map { Sidecar(url: $0.url, label: $0.label) }, remember: false)
+    }
+
+    private func replacePlayer() {
+        guard player.media != nil else { return }
+        let old = player
+        old.delegate = nil
+        old.stopInBackground()
+        drawable.removeFromSuperview()
+        drawable = UIView()
+        install(drawable)
+        player = VLCMediaPlayer()
+        player.drawable = drawable
+        player.delegate = self
+        isPlaying = false
     }
 
     /// Sidecar subtitles, downloaded to local files. Safe to call before the
     /// file has opened; they attach once it has.
-    func addSubtitles(_ sidecars: [Sidecar]) {
+    func addSubtitles(_ new: [Sidecar]) {
+        addSubtitles(new, remember: true)
+    }
+
+    private func addSubtitles(_ new: [Sidecar], remember: Bool) {
+        guard !new.isEmpty else { return }
+        if remember { sidecars += new }
         if hasStarted {
-            attach(sidecars)
+            attach(new)
         } else {
-            pendingSubtitles += sidecars
+            pendingSubtitles += new
         }
     }
 
@@ -143,69 +230,190 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
     }
 
     func togglePlay() {
-        if player.isPlaying { player.pause() } else { player.play() }
+        if wantsToPlay { pause() } else { play() }
     }
 
-    func pause() { player.pause() }
-    func play() { player.play() }
+    func pause() {
+        wantsToPlay = false
+        if isReconnecting {
+            // Nothing to pause yet; it's opened again when the user says.
+            reconnectWork?.cancel()
+            reconnectWork = nil
+            isReconnecting = false
+            isBuffering = false
+        }
+        if player.isPlaying || player.state == .buffering || player.state == .opening { player.pause() }
+        isPlaying = false
+        updateNowPlaying()
+    }
+
+    func play() {
+        wantsToPlay = true
+        lastProgress = Date()
+        if player.media == nil || player.state == .ended || player.state == .error || player.state == .stopped {
+            // Paused while it was reconnecting, or it had been lost.
+            reconnect()
+        } else {
+            player.play()
+        }
+        updateNowPlaying()
+    }
 
     func skip(_ seconds: Int32) {
         if seconds > 0 { player.jumpForward(seconds) } else { player.jumpBackward(-seconds) }
+        lastProgress = Date()
     }
 
     func seek(to seconds: Double) {
         currentTime = seconds
+        lastProgress = Date()
         player.time = VLCTime(int: Int32(max(0, seconds) * 1000))
+        updateNowPlaying()
     }
 
     func selectAudio(_ id: Int32) {
         player.currentAudioTrackIndex = id
         currentAudio = id
+        restoreAudio = nil
     }
 
     func selectSubtitle(_ id: Int32) {
         player.currentVideoSubTitleIndex = id
         currentSubtitle = id
+        restoreSubtitle = nil
     }
 
     func stop() {
+        watchdog?.invalidate()
+        watchdog = nil
+        reconnectWork?.cancel()
+        reconnectWork = nil
+        wantsToPlay = false
         player.stopInBackground()
+        clearNowPlaying()
+    }
+
+    // MARK: Reconnecting
+
+    private func startWatchdog() {
+        guard watchdog == nil, url.map({ !$0.isFileURL }) == true else { return }
+        watchdog = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            self?.checkForStall()
+        }
+    }
+
+    private func checkForStall() {
+        // Waiting to reopen is a stall already being dealt with; a reopen
+        // that hangs is one more.
+        guard wantsToPlay, reconnectWork == nil, errorMessage == nil, url.map({ !$0.isFileURL }) == true else { return }
+        let limit = hasStarted ? Self.stallTimeout : Self.openTimeout
+        if Date().timeIntervalSince(lastProgress) > limit { connectionLost() }
+    }
+
+    /// The share stopped sending, or VLC gave up on it. Opens the file
+    /// again where it got to, waiting longer each time, until it plays or
+    /// it's been trying too long.
+    private func connectionLost() {
+        guard let url, !url.isFileURL else {
+            errorMessage = "VLC couldn't open this file."
+            return
+        }
+        let started = reconnectStarted ?? Date()
+        reconnectStarted = started
+        guard Date().timeIntervalSince(started) < Self.reconnectWindow else {
+            giveUp()
+            return
+        }
+        if hasStarted {
+            // Pick the same tracks again once they're back.
+            restoreAudio = restoreAudio ?? audioTracks.first { $0.id == currentAudio }?.name
+            restoreSubtitle = restoreSubtitle ?? subtitleTracks.first { $0.id == currentSubtitle }?.name
+        }
+        isReconnecting = true
+        isBuffering = true
+        isPlaying = false
+        let delay = min(8, pow(2, Double(reconnectAttempts)))
+        reconnectAttempts += 1
+        // Stop the stuck one now, so it doesn't jump back in later.
+        replacePlayer()
+        let work = DispatchWorkItem { [weak self] in self?.reconnect() }
+        reconnectWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private func reconnect() {
+        let resumeAt = currentTime
+        open(startAt: resumeAt)
+        // `open` clears this; it's still the same reconnect until it plays.
+        isReconnecting = reconnectStarted != nil
+    }
+
+    private func giveUp() {
+        isReconnecting = false
+        isBuffering = false
+        isPlaying = false
+        wantsToPlay = false
+        reconnectAttempts = 0
+        reconnectStarted = nil
+        replacePlayer()
+        errorMessage = "Lost the connection to the share. Check the server is reachable, then try again."
+        updateNowPlaying()
+    }
+
+    /// It's playing again, so a later dropout starts its own count.
+    private func recovered() {
+        guard reconnectStarted != nil || isReconnecting else { return }
+        reconnectStarted = nil
+        reconnectAttempts = 0
+        isReconnecting = false
     }
 
     // MARK: VLCMediaPlayerDelegate
 
     func mediaPlayerStateChanged(_ aNotification: Notification) {
-        DispatchQueue.main.async { [weak self] in self?.stateChanged() }
+        DispatchQueue.main.async { [weak self] in self?.stateChanged(aNotification.object as? VLCMediaPlayer) }
     }
 
     func mediaPlayerTimeChanged(_ aNotification: Notification) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            // A player let go for a reconnect can still report in.
+            if let sender = aNotification.object as? VLCMediaPlayer, sender !== self.player { return }
             let t = Double(self.player.time.intValue) / 1000
-            if abs(t - self.currentTime) >= 0.5 { self.currentTime = t }
+            if abs(t - self.currentTime) >= 0.5 {
+                self.currentTime = t
+                if Int(t) % 10 == 0 { self.updateNowPlaying() }
+            }
+            self.lastProgress = Date()
             if self.duration == 0, let length = self.player.media?.length.intValue, length > 0 {
                 self.duration = Double(length) / 1000
+                self.updateNowPlaying()
             }
             if self.isBuffering { self.isBuffering = false }
-            // VLC doesn't always report .playing after buffering.
-            if self.player.isPlaying, !self.isPlaying { self.isPlaying = true }
+            // VLC doesn't always report .playing after buffering, and a local
+            // file can be playing before the async state callbacks catch up,
+            // which left its tracks unlisted.
+            if self.player.isPlaying {
+                self.started()
+                if !self.isPlaying {
+                    self.isPlaying = true
+                    self.updateNowPlaying()
+                }
+            }
         }
     }
 
-    private func stateChanged() {
+    private func stateChanged(_ sender: VLCMediaPlayer?) {
+        // A player let go for a reconnect can still report in.
+        if let sender, sender !== player { return }
         switch player.state {
         case .opening, .buffering:
             isBuffering = !player.isPlaying
+            if player.isPlaying { started() }
         case .playing:
             isBuffering = false
             isPlaying = true
-            if !hasStarted {
-                hasStarted = true
-                // Slaves only attach once the input is open.
-                let pending = pendingSubtitles
-                pendingSubtitles = []
-                attach(pending)
-            }
+            started()
             refreshTracks()
         case .paused:
             isPlaying = false
@@ -219,28 +427,48 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
             let last = Double(player.time.intValue) / 1000
             if last > currentTime { currentTime = last }
             if reachedEnd {
+                wantsToPlay = false
                 onEnded?()
             } else {
                 // VLC also "ends" a stream the router stopped sending partway,
                 // which mustn't mark the video watched and skip to the next.
-                errorMessage = "Lost the connection to the share. Check the server is reachable, then try again."
+                connectionLost()
             }
         case .error:
             isPlaying = false
             isBuffering = false
-            errorMessage = "VLC couldn't open this file. Check the server is reachable, then try again."
+            if url?.isFileURL == true {
+                errorMessage = "VLC couldn't open this file."
+            } else {
+                connectionLost()
+            }
         case .stopped:
             isPlaying = false
         @unknown default:
             break
         }
         if let length = player.media?.length.intValue, length > 0 { duration = Double(length) / 1000 }
+        updateNowPlaying()
+    }
+
+    /// The file is open and playing: hand over sidecars waiting for that.
+    private func started() {
+        recovered()
+        guard !hasStarted else { return }
+        hasStarted = true
+        // Slaves only attach once the input is open.
+        let pending = pendingSubtitles
+        pendingSubtitles = []
+        attach(pending)
+        refreshTracks()
+        // Embedded tracks can be listed a moment after it starts.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.refreshTracks() }
     }
 
     /// Near enough the end to count as finished, by the same rule that
     /// marks a video watched. With no length known there's no telling.
     private var reachedEnd: Bool {
-        guard duration > 0 else { return true }
+        guard duration > 0 else { return url?.isFileURL ?? true }
         return Video.isFinished(position: currentTime, duration: duration)
     }
 
@@ -259,6 +487,26 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
         // "Off" is always added here instead.
         subtitleTracks = [.subtitlesOff]
             + subs.map { MediaTrack(id: $0.id, name: subtitleLabels[$0.id] ?? $0.name) }
+        restoreTracks()
+    }
+
+    /// After a reconnect, the audio and subtitles that were on before.
+    private func restoreTracks() {
+        guard hasStarted else { return }
+        if let name = restoreAudio, let track = audioTracks.first(where: { $0.name == name }) {
+            restoreAudio = nil
+            if track.id != currentAudio {
+                player.currentAudioTrackIndex = track.id
+                currentAudio = track.id
+            }
+        }
+        if let name = restoreSubtitle, let track = subtitleTracks.first(where: { $0.name == name }) {
+            restoreSubtitle = nil
+            if track.id != currentSubtitle {
+                player.currentVideoSubTitleIndex = track.id
+                currentSubtitle = track.id
+            }
+        }
     }
 
     private static func tracks(names: [Any], indexes: [Any]) -> [MediaTrack] {
@@ -266,6 +514,73 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
             guard let id = (index as? NSNumber)?.int32Value else { return nil }
             return MediaTrack(id: id, name: (name as? String) ?? "Track \(id)")
         }
+    }
+
+    // MARK: System controls
+
+    /// What the lock screen, Control Center and headphones show and
+    /// control. Set by the screen as each video starts.
+    struct NowPlaying {
+        var title: String
+        var subtitle: String?
+        var artwork: UIImage?
+    }
+
+    var nowPlaying: NowPlaying? {
+        didSet { updateNowPlaying() }
+    }
+
+    private var remoteTargets: [(MPRemoteCommand, Any)] = []
+
+    /// Takes the play, pause and skip buttons on the lock screen, in
+    /// Control Center and on headphones and AirPods.
+    func enableSystemControls() {
+        guard remoteTargets.isEmpty else { return }
+        let center = MPRemoteCommandCenter.shared()
+        func on(_ command: MPRemoteCommand, _ handler: @escaping (MPRemoteCommandEvent) -> Bool) {
+            command.isEnabled = true
+            let target = command.addTarget { handler($0) ? .success : .commandFailed }
+            remoteTargets.append((command, target))
+        }
+        on(center.playCommand) { [weak self] _ in self?.play(); return self != nil }
+        on(center.pauseCommand) { [weak self] _ in self?.pause(); return self != nil }
+        on(center.togglePlayPauseCommand) { [weak self] _ in self?.togglePlay(); return self != nil }
+        center.skipForwardCommand.preferredIntervals = [30]
+        on(center.skipForwardCommand) { [weak self] _ in self?.skip(30); return self != nil }
+        center.skipBackwardCommand.preferredIntervals = [10]
+        on(center.skipBackwardCommand) { [weak self] _ in self?.skip(-10); return self != nil }
+        on(center.changePlaybackPositionCommand) { [weak self] event in
+            guard let self, let event = event as? MPChangePlaybackPositionCommandEvent else { return false }
+            self.seek(to: event.positionTime)
+            return true
+        }
+    }
+
+    private func clearNowPlaying() {
+        for (command, target) in remoteTargets {
+            command.removeTarget(target)
+            command.isEnabled = false
+        }
+        remoteTargets = []
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        MPNowPlayingInfoCenter.default().playbackState = .stopped
+    }
+
+    private func updateNowPlaying() {
+        guard let nowPlaying, !remoteTargets.isEmpty else { return }
+        var info: [String: Any] = [
+            MPMediaItemPropertyTitle: nowPlaying.title,
+            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.video.rawValue,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: currentTime,
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
+        ]
+        if let subtitle = nowPlaying.subtitle { info[MPMediaItemPropertyArtist] = subtitle }
+        if duration > 0 { info[MPMediaItemPropertyPlaybackDuration] = duration }
+        if let image = nowPlaying.artwork {
+            info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+        }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        MPNowPlayingInfoCenter.default().playbackState = isPlaying ? .playing : .paused
     }
 }
 

@@ -15,6 +15,9 @@ final class SMB2Client: CustomDebugStringConvertible, CustomReflectable, @unchec
     var context: UnsafeMutablePointer<smb2_context>?
     private var _context_lock = NSRecursiveLock()
     var timeout: TimeInterval
+    /// Reel patch (see PATCHES.md): the socket has died or been given up
+    /// on, so nothing more will work on this client.
+    private(set) var isBroken = false
 
     init(timeout: TimeInterval) throws {
         self.context = try smb2_init_context().unwrap()
@@ -209,6 +212,7 @@ extension SMB2Client {
     func service(revents: Int32) throws {
         let result = smb2_service(context, revents)
         if result < 0 {
+            isBroken = true
             smb2_destroy_context(context)
             context = nil
             try POSIXError.throwIfError(result, description: error)
@@ -378,6 +382,7 @@ extension SMB2Client {
     }
 
     private func abandonSocket() {
+        isBroken = true
         guard let context, context.pointee.fd >= 0 else { return }
         close(context.pointee.fd)
         context.pointee.fd = -1

@@ -73,7 +73,18 @@ struct PlayerScreen: View {
             VideoSurface(view: controller.videoView).ignoresSafeArea().allowsHitTesting(false)
 
             if controller.isBuffering, controller.errorMessage == nil {
-                ProgressView().controlSize(.large).tint(.white)
+                VStack(spacing: 12) {
+                    ProgressView().controlSize(.large).tint(.white)
+                    if controller.isReconnecting {
+                        Text("Reconnecting to the share…")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(.black.opacity(0.55), in: Capsule())
+                    }
+                }
+                .allowsHitTesting(false)
             }
 
             if locked {
@@ -122,6 +133,7 @@ struct PlayerScreen: View {
             UIApplication.shared.isIdleTimerDisabled = true
             Orientation.request(.landscape)
             controller.onEnded = { playNextOrClose() }
+            controller.enableSystemControls()
             start(at: session.startAt)
         }
         .onDisappear {
@@ -394,26 +406,50 @@ struct PlayerScreen: View {
         controller.load(url, startAt: seconds)
         lastSaved = Date()
         scheduleHide()
+        showOnLockScreen()
 
         let current = index
         let videoPath = video.path
         let added = AddedSubtitles.files(for: videoPath)
         addedSubtitleCount = added.count
-        let subtitles = video.subtitles
+        // Ones already on the phone go on straight away. Waiting for the rest
+        // to come from the share held them all up, for a minute with no share.
+        var onPhone: [PlayerController.Sidecar] = []
+        var onShare: [SubtitleFile] = []
+        for s in video.subtitles {
+            if let saved = downloads.localSubtitle(s, of: videoPath) {
+                onPhone.append(.init(url: saved, label: s.label))
+            } else {
+                onShare.append(s)
+            }
+        }
+        onPhone += added.map { .init(url: $0, label: AddedSubtitles.label(for: $0, videoPath: videoPath)) }
+        controller.addSubtitles(onPhone)
+        guard !onShare.isEmpty else { return }
         let config = settings.shareConfig
-        guard !subtitles.isEmpty || !added.isEmpty else { return }
         Task {
-            var local: [PlayerController.Sidecar] = []
-            for s in subtitles {
-                if let saved = downloads.localSubtitle(s, of: videoPath) {
-                    local.append(.init(url: saved, label: s.label))
-                } else if let url = try? await ServerConnection.shared.download(s.path, config: config) {
-                    local.append(.init(url: url, label: s.label))
+            var fetched: [PlayerController.Sidecar] = []
+            for s in onShare {
+                if let url = try? await ServerConnection.shared.download(s.path, config: config) {
+                    fetched.append(.init(url: url, label: s.label))
                 }
             }
-            local += added.map { .init(url: $0, label: AddedSubtitles.label(for: $0, videoPath: videoPath)) }
             // The user may have skipped ahead while these downloaded.
-            if current == index { controller.addSubtitles(local) }
+            if current == index { controller.addSubtitles(fetched) }
+        }
+    }
+
+    /// The title and artwork on the lock screen and in Control Center.
+    private func showOnLockScreen() {
+        let current = index
+        controller.nowPlaying = .init(title: video.displayTitle,
+                                      subtitle: video.isMovie ? nil : "\(video.episodeCode) · \(video.title)")
+        let ref = video.show?.posterRef ?? video.posterRef
+        let config = settings.shareConfig
+        Task {
+            guard let ref, let image = await ArtworkStore.shared.image(for: ref, config: config),
+                  current == index else { return }
+            controller.nowPlaying?.artwork = image
         }
     }
 

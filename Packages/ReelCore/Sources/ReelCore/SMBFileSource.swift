@@ -98,15 +98,25 @@ public final class SMBFileSource: ShareSource, @unchecked Sendable {
     /// Runs `operation` on the open session. libsmb2 never reconnects by
     /// itself, so a session that died since it was opened (iOS reclaims a
     /// suspended app's sockets, the phone changed network, the router
-    /// restarted) is replaced and the operation tried once more.
+    /// restarted or closed an idle connection) is replaced and the operation
+    /// tried once more.
     private func withConnection<T>(_ operation: (SMB2Manager) async throws -> T) async throws -> T {
         let manager = try await connect()
         do {
             return try await operation(manager)
-        } catch let error where Self.isConnectionError(ShareError.code(of: error).0) {
+        } catch let error where Self.isConnectionError(ShareError.code(of: error).0) || manager.isSessionLost {
             // Requests that failed together start one new session between them.
             drop(manager)
-            return try await operation(try await connect())
+            let fresh = try await connect()
+            do {
+                return try await operation(fresh)
+            } catch let error where fresh.isSessionLost && !Self.isConnectionError(ShareError.code(of: error).0) {
+                // The new session died too: that's the server, not the file,
+                // whatever errno libsmb2 was left with.
+                drop(fresh)
+                let (code, detail) = ShareError.code(of: error)
+                throw ShareError.server(host: config.host, code: code, detail: detail)
+            }
         }
     }
 
