@@ -125,6 +125,8 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
     private var wantsToPlay = false
     /// When playback last moved on, or the file was last opened.
     private var lastProgress = Date()
+    /// When the user last jumped somewhere in the file.
+    private var lastSeek: Date?
     private var watchdog: Timer?
     private var reconnectAttempts = 0
     private var reconnectStarted: Date?
@@ -212,6 +214,14 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
         isStopped = false
         duration = 0
         open(startAt: seconds)
+    }
+
+    /// Shows `message` with Try Again, for when there's nothing to open.
+    func fail(_ message: String) {
+        isBuffering = false
+        isPlaying = false
+        wantsToPlay = false
+        errorMessage = message
     }
 
     /// Opens `url` in a fresh player, from `seconds`.
@@ -331,11 +341,13 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
     func skip(_ seconds: Int32) {
         if seconds > 0 { player.jumpForward(seconds) } else { player.jumpBackward(-seconds) }
         lastProgress = Date()
+        lastSeek = Date()
     }
 
     func seek(to seconds: Double) {
         currentTime = seconds
         lastProgress = Date()
+        lastSeek = Date()
         player.time = VLCTime(int: Int32(max(0, seconds) * 1000))
         updateNowPlaying()
     }
@@ -385,7 +397,10 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
         // Waiting to reopen is a stall already being dealt with; a reopen
         // that hangs is one more.
         guard wantsToPlay, reconnectWork == nil, errorMessage == nil, url.map({ !$0.isFileURL }) == true else { return }
-        let limit = hasStarted ? Self.stallTimeout : Self.openTimeout
+        // A jump past what's been read ahead waits on the router much as
+        // opening the file does, so it gets as long.
+        let justSeeked = lastSeek.map { Date().timeIntervalSince($0) < Self.openTimeout } ?? false
+        let limit = hasStarted && !justSeeked ? Self.stallTimeout : Self.openTimeout
         if Date().timeIntervalSince(lastProgress) > limit { connectionLost() }
     }
 

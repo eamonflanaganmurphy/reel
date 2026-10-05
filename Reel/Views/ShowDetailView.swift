@@ -92,7 +92,7 @@ private struct ShowPage: View {
                 MoreLikeThisRow(title: show, candidates: shows, libraryName: settings.libraryName(for: show.libraryID)) { other in
                     NavigationLink(value: other) {
                         PosterCard(ref: other.posterRef, fallbackRefs: other.fallbackRefs, title: other.title,
-                                   subtitle: other.year.map(String.init), symbol: "tv")
+                                   subtitle: other.year.map(String.init), symbol: "tv", download: .folder(other.path))
                     }
                     .buttonStyle(.plain)
                 }

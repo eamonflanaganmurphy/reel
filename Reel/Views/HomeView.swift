@@ -25,7 +25,7 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                statusBanner
+                SyncBanner()
 
                 KeepWatchingShelf(videos: inProgress)
 
@@ -64,7 +64,7 @@ struct HomeView: View {
                 ShelfRow(title: "Recently Added · \(library.name)", items: recent, cardWidth: layout.posterWidth) { movie in
                     NavigationLink(value: movie) {
                         PosterCard(ref: movie.posterRef, fallbackRefs: [movie.frameRef], title: movie.title, subtitle: movie.year.map(String.init),
-                                   progress: movie.isInProgress ? movie.progress : 0, watched: movie.watched)
+                                   progress: movie.isInProgress ? movie.progress : 0, watched: movie.watched, download: .file(movie.path))
                     }
                     .buttonStyle(.plain)
                     .contextMenu { MovieMenuItems(movie: movie) }
@@ -76,30 +76,11 @@ struct HomeView: View {
                 ShelfRow(title: "Recently Updated · \(library.name)", items: recent, cardWidth: layout.posterWidth) { show in
                     NavigationLink(value: show) {
                         PosterCard(ref: show.posterRef, fallbackRefs: show.fallbackRefs, title: show.title,
-                                   subtitle: "\(show.episodes.count) episodes", symbol: "tv")
+                                   subtitle: "\(show.episodes.count) episodes", symbol: "tv", download: .folder(show.path))
                     }
                     .buttonStyle(.plain)
                 }
             }
-        }
-    }
-
-    @ViewBuilder
-    private var statusBanner: some View {
-        switch sync.state {
-        case .scanning(let message):
-            HStack(spacing: 10) {
-                ProgressView()
-                Text(message).font(.subheadline).foregroundStyle(.secondary)
-            }
-            .padding(.horizontal)
-        case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.subheadline)
-                .foregroundStyle(.orange)
-                .padding(.horizontal)
-        case .idle:
-            EmptyView()
         }
     }
 

@@ -44,7 +44,8 @@ struct RootView: View {
             }
         }
         .task {
-            if !settings.isConfigured { showingSettings = true }
+            // Not with downloads to watch: they play without a share.
+            if !settings.isConfigured, downloads.items.isEmpty { showingSettings = true }
         }
         // A tab hidden or deleted while open leaves nothing selected.
         .onChange(of: visibleTabs) { _, tabs in

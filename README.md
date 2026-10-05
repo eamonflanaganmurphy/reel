@@ -63,7 +63,8 @@ server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve 
   on the share before it counts as done, and its subtitles must come too, so nothing turns up cut short away from the
   share. Its pictures are saved when it's added, and a video with none gets its thumbnail from the download itself.
   After a downloaded episode, autoplay goes on to the next one if the share is in reach, and otherwise to the next
-  downloaded one. The Downloads button on Home lists them, with
+  downloaded one. Posters carry a download mark (a show's once any episode is downloaded), so what plays away
+  from the share is plain at a glance, and downloads that start together each leave room for the others. The Downloads button on Home lists them, with
   what they take up, and removes them; a download's menu can also share the file, e.g. to save it in Files.
 - **Offline:** artwork from TMDB (posters, backdrops, title logos and cast photos) is saved on the device during
   scans, so the library looks the same with no internet, e.g. on the router's own WiFi on a plane, or a plane's WiFi

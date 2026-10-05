@@ -30,6 +30,7 @@ struct CollectionView: View {
 
     var body: some View {
         ScrollView {
+            SyncBanner().padding(.top, 8)
             BrowsePage(scope: scope, data: data, all: data.entries, inProgress: data.inProgress(inProgress), mode: $mode,
                        sort: sort, search: search) { entry in
                 Button(role: .destructive) { remove(entry) } label: {

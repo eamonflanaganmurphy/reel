@@ -47,7 +47,8 @@ private struct MoviePage: View {
                     NavigationLink(value: movie) {
                         PosterCard(ref: movie.posterRef, fallbackRefs: [movie.frameRef], title: movie.title,
                                    subtitle: movie.year.map(String.init),
-                                   progress: movie.isInProgress ? movie.progress : 0, watched: movie.watched)
+                                   progress: movie.isInProgress ? movie.progress : 0, watched: movie.watched,
+                                   download: .file(movie.path))
                     }
                     .buttonStyle(.plain)
                     .contextMenu { MovieMenuItems(movie: movie) }

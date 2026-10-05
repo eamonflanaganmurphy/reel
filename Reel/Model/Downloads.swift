@@ -46,8 +46,19 @@ final class DownloadCenter {
     private(set) var items: [Item] = [] {
         didSet { save() }
     }
-    /// Bytes so far of each one downloading, by path.
-    private(set) var received: [String: Int64] = [:]
+    /// Bytes so far of each one downloading, by path. Each is observed on
+    /// its own, so a piece arriving for one only redraws what shows that
+    /// one, not every download badge on screen. Made with its worker.
+    @ObservationIgnored private var progress: [String: Received] = [:]
+
+    @Observable final class Received {
+        var bytes: Int64 = 0
+    }
+
+    /// The full size of each download under way, by path. What they still
+    /// need is kept back from the free space each new one checks, so four
+    /// starting at once don't each count the same space as theirs.
+    @ObservationIgnored private var reserved: [String: Int64] = [:]
     /// Why the queue has stopped, e.g. the share is out of reach. Cleared
     /// when the app comes back to the front, or by Try Again.
     private(set) var stopReason: String?
@@ -119,10 +130,27 @@ final class DownloadCenter {
         if item.finished { return .downloaded }
         if let failure = item.failure { return .failed(failure) }
         if workers[path] != nil {
-            let bytes = received[path] ?? 0
+            let bytes = bytesReceived(path)
             return .downloading(item.size > 0 ? min(1, Double(bytes) / Double(item.size)) : nil)
         }
         return .queued
+    }
+
+    /// Whether the video at `path` is on this device, for the posters. Only
+    /// reads the list, so grids don't redraw as pieces come in.
+    func isDownloaded(_ path: String) -> Bool {
+        items.contains { $0.finished && $0.path == path }
+    }
+
+    /// Whether any video in the folder at `path` is, e.g. a show's episodes.
+    func hasDownloads(in folder: String) -> Bool {
+        let prefix = folder + "/"
+        return items.contains { $0.finished && $0.path.hasPrefix(prefix) }
+    }
+
+    /// How much of the video at `path` has come in, while it downloads.
+    func bytesReceived(_ path: String) -> Int64 {
+        progress[path]?.bytes ?? 0
     }
 
     /// The downloaded copy of the video at `path`, to play instead of the share's.
@@ -225,10 +253,12 @@ final class DownloadCenter {
         for next in waiting.prefix(Self.maxConcurrent - workers.count) {
             holdBackgroundTime()
             let path = next.path
+            progress[path] = Received()
             workers[path] = Task {
                 await run(next, config: config)
                 workers[path] = nil
-                received[path] = nil
+                progress[path] = nil
+                reserved[path] = nil
                 pump()
             }
         }
@@ -240,7 +270,6 @@ final class DownloadCenter {
     }
 
     private func run(_ item: Item, config: ShareConfig) async {
-        received[item.path] = 0
         let path = item.path
         let folder = Self.folder(for: path)
         let final = Self.file(for: item)
@@ -248,9 +277,15 @@ final class DownloadCenter {
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let have = (try? partial.resourceValues(forKeys: [.fileSizeKey]).fileSize).map { Int64($0) } ?? 0
-            if let free = Self.freeSpace, item.size - have > free - Self.spareSpace {
-                throw DownloadError.noSpace(needed: item.size - have, free: free)
+            let needed = max(0, item.size - have)
+            if let free = Self.freeSpace {
+                let othersNeed = reserved.filter { $0.key != path }
+                    .reduce(Int64(0)) { $0 + max(0, $1.value - bytesReceived($1.key)) }
+                if needed > free - othersNeed - Self.spareSpace {
+                    throw DownloadError.noSpace(needed: needed, free: max(0, free - othersNeed))
+                }
             }
+            reserved[path] = item.size
 
             // Its own connection, so pieces of four downloads don't queue up
             // in front of the posters and progress on the shared one.
@@ -298,6 +333,13 @@ final class DownloadCenter {
             // Paused, removed, or out of background time: what it has so far
             // is kept. A WebDAV request cut short says so as an error of its own.
             if error is CancellationError || Task.isCancelled { return }
+            if Self.isOutOfSpace(error) {
+                // Filled up anyway, e.g. by something else on the phone.
+                guard let i = items.firstIndex(where: { $0.path == path }) else { return }
+                items[i].failure = DownloadError.noSpace(needed: max(0, item.size - (Self.partialSize(partial) ?? 0)),
+                                                         free: Self.freeSpace ?? 0).localizedDescription
+                return
+            }
             if Self.isOutOfReach(error) {
                 // Not this video's fault, so it stays queued with the rest.
                 stopReason = LibrarySync.describe(error)
@@ -309,7 +351,18 @@ final class DownloadCenter {
     }
 
     private func update(received bytes: Int64, of path: String) {
-        if workers[path] != nil { received[path] = bytes }
+        progress[path]?.bytes = bytes
+    }
+
+    private static func partialSize(_ url: URL) -> Int64? {
+        (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map { Int64($0) }
+    }
+
+    private static func isOutOfSpace(_ error: Error) -> Bool {
+        let ns = error as NSError
+        return (ns.domain == NSPOSIXErrorDomain && ns.code == Int(ENOSPC))
+            || (ns.domain == NSCocoaErrorDomain && ns.code == NSFileWriteOutOfSpaceError)
+            || (ns.userInfo[NSUnderlyingErrorKey] as? NSError).map { $0.domain == NSPOSIXErrorDomain && $0.code == Int(ENOSPC) } == true
     }
 
     /// Losing the server, as opposed to a problem with the one file. SMB

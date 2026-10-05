@@ -221,11 +221,31 @@ extension Notification.Name {
 }
 
 extension TMDBDetails {
+    /// Decoded once per distinct blob and kept: pages, grids and browse
+    /// rows ask for the same titles' details on every redraw.
     init?(json: Data?) {
-        guard let json, let decoded = try? JSONDecoder().decode(TMDBDetails.self, from: json) else { return nil }
+        guard let json else { return nil }
+        if let kept = detailsCache.object(forKey: json as NSData) {
+            self = kept.details
+            return
+        }
+        guard let decoded = try? JSONDecoder().decode(TMDBDetails.self, from: json) else { return nil }
+        detailsCache.setObject(DecodedDetails(decoded), forKey: json as NSData)
         self = decoded
     }
 }
+
+private final class DecodedDetails {
+    let details: TMDBDetails
+    init(_ details: TMDBDetails) { self.details = details }
+}
+
+/// Thread-safe, so the detached decodes (`decodeDetails`) share it.
+private let detailsCache: NSCache<NSData, DecodedDetails> = {
+    let cache = NSCache<NSData, DecodedDetails>()
+    cache.countLimit = 3000
+    return cache
+}()
 
 extension Video {
     /// What a collection's filters look at, given this movie's decoded

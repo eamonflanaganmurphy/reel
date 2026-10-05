@@ -36,6 +36,8 @@ struct LibraryView: View {
 
     var body: some View {
         ScrollView {
+            // A pull to refresh that fails says why here too, not just on Home.
+            SyncBanner().padding(.top, 8)
             BrowsePage(scope: .library(library.id), data: data, all: all, inProgress: inProgress, mode: $mode,
                        sort: sort, search: search) { _ in EmptyView() }
 

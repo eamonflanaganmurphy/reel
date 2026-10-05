@@ -43,7 +43,6 @@ final class LibrarySync {
         defer { isReadingShare = false }
         await settings.tidyAddress()
         var problems: [String] = []
-        let downloaded = downloads?.finishedPaths ?? []
         do {
             let config = settings.shareConfig
             let source = try ServerConnection.shared.source(for: config)
@@ -69,6 +68,9 @@ final class LibrarySync {
 
             for library in settings.libraries {
                 state = .scanning("Scanning \(library.name)…")
+                // Read again for each library: one may have finished
+                // downloading meanwhile, and it mustn't go with its file.
+                let downloaded = downloads?.finishedPaths ?? []
                 let result: ScanResult
                 do {
                     result = try await scanner.scan(root: library.path, kind: library.kind)
@@ -92,7 +94,7 @@ final class LibrarySync {
                 }
                 try context.save()
             }
-            removeDeletedLibraries(keeping: Set(settings.libraries.map(\.id)), downloaded: downloaded, context: context)
+            removeDeletedLibraries(keeping: Set(settings.libraries.map(\.id)), downloaded: downloads?.finishedPaths ?? [], context: context)
             try context.save()
             isReadingShare = false
             for connection in extra { Task { await connection.disconnect() } }
@@ -115,9 +117,13 @@ final class LibrarySync {
                     try await fetchMetadata(client: client, settings: settings, context: context)
                     try await fetchDetails(client: client, context: context)
                     await saveArtwork(context: context)
-                } catch let error as URLError {
+                } catch {
+                    // The share scanned fine, so whatever TMDB said (a key it
+                    // rejects, rate limiting that didn't let up, an answer it
+                    // couldn't read) is noted and this still counts as a sync.
                     await InternetCheck.shared.noteFailure(error)
                     try? context.save()
+                    if !(error is URLError || error is CancellationError) { problems.append("TMDB: \(Self.describe(error))") }
                 }
             }
 
@@ -267,8 +273,10 @@ final class LibrarySync {
     }
 
     private func apply(_ scanned: ScannedVideo, to video: Video) {
-        video.fileSize = scanned.size
-        if video.subtitles != scanned.subtitles { video.subtitles = scanned.subtitles }
+        if video.fileSize != scanned.size { video.fileSize = scanned.size }
+        // Compared encoded, which spares decoding every video's on every scan.
+        let subtitles = try? JSONEncoder().encode(scanned.subtitles)
+        if video.subtitlesJSON != subtitles, video.subtitles != scanned.subtitles { video.subtitlesJSON = subtitles }
     }
 
     private func removeDeletedLibraries(keeping ids: Set<UUID>, downloaded: Set<String>, context: ModelContext) {
@@ -317,7 +325,8 @@ final class LibrarySync {
         }) { answer in
             let movie = movies[answer.index]
             done += 1
-            state = .scanning("Fetching movie info \(done) of \(movies.count)…")
+            // Every few, not every one: Home redraws with it.
+            if done % 10 == 0 || done == movies.count { state = .scanning("Fetching movie info \(done) of \(movies.count)…") }
             if let hit = answer.hit {
                 if movie.tmdbID != hit.id { movie.detailsJSON = nil; movie.detailsFetchedAt = nil }
                 movie.tmdbID = hit.id
@@ -363,7 +372,7 @@ final class LibrarySync {
         }) { answer in
             let show = shows[answer.index]
             done += 1
-            state = .scanning("Fetching TV info \(done) of \(shows.count)…")
+            if done % 10 == 0 || done == shows.count { state = .scanning("Fetching TV info \(done) of \(shows.count)…") }
             if !show.metadataFetched {
                 if let hit = answer.hit {
                     if show.tmdbID != hit.id { show.detailsJSON = nil; show.detailsFetchedAt = nil }
@@ -408,7 +417,7 @@ final class LibrarySync {
         var done = 0
         func step() throws {
             done += 1
-            state = .scanning("Fetching cast and details \(done) of \(total)…")
+            if done % 10 == 0 || done == total { state = .scanning("Fetching cast and details \(done) of \(total)…") }
             if done % 20 == 0 { try context.save() }
         }
         let movieIDs = movies.indices.compactMap { i in movies[i].tmdbID.map { DetailsQuery(index: i, id: $0) } }

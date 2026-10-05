@@ -140,14 +140,14 @@ struct PersonView: View {
         case .movie(let video, let role):
             NavigationLink(value: video) {
                 PosterCard(ref: video.posterRef, fallbackRefs: [video.frameRef], title: video.title,
-                           subtitle: role ?? video.year.map(String.init), watched: video.watched)
+                           subtitle: role ?? video.year.map(String.init), watched: video.watched, download: .file(video.path))
             }
             .buttonStyle(.plain)
             .contextMenu { MovieMenuItems(movie: video) }
         case .show(let show, let role):
             NavigationLink(value: show) {
                 PosterCard(ref: show.posterRef, fallbackRefs: show.fallbackRefs, title: show.title,
-                           subtitle: role ?? show.year.map(String.init), symbol: "tv")
+                           subtitle: role ?? show.year.map(String.init), symbol: "tv", download: .folder(show.path))
             }
             .buttonStyle(.plain)
         }

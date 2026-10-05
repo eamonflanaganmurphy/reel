@@ -270,7 +270,7 @@ private struct DownloadRow: View {
         case .downloading(let fraction):
             VStack(alignment: .leading, spacing: 3) {
                 ProgressView(value: fraction ?? 0)
-                let bytes = downloads.received[item.path] ?? 0
+                let bytes = downloads.bytesReceived(item.path)
                 Text(item.size > 0
                      ? "\(bytes.formattedFileSize) of \(item.size.formattedFileSize)"
                      : bytes.formattedFileSize)

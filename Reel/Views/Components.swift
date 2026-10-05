@@ -9,12 +9,25 @@ struct PosterCard: View {
     var progress: Double = 0
     var watched = false
     var symbol = "film"
+    /// A movie's file, or a show's folder, to mark the poster when it's
+    /// downloaded (any episode, for a show): what plays away from the share.
+    var download: DownloadMark?
+
+    enum DownloadMark {
+        case file(String)
+        case folder(String)
+    }
+
+    @Environment(DownloadCenter.self) private var downloads
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ArtworkFrame(ref: ref, fallbackRefs: fallbackRefs, fallbackTitle: title, fallbackSymbol: symbol)
                 .overlay(alignment: .topTrailing) {
                     if watched { WatchedBadge().padding(6) }
+                }
+                .overlay(alignment: .topLeading) {
+                    if isDownloaded { DownloadedBadge().padding(6) }
                 }
                 .overlay(alignment: .bottom) {
                     if progress > 0 { ProgressBar(value: progress).padding(6) }
@@ -30,12 +43,16 @@ struct PosterCard: View {
 /// 16:9 card for Keep Watching.
 struct WideCard: View {
     let video: Video
+    @Environment(DownloadCenter.self) private var downloads
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ArtworkFrame(ref: video.backdropRef ?? video.posterRef ?? video.show?.backdropRef,
                          fallbackRefs: [video.frameRef], aspectRatio: 16.0 / 9.0, fallbackTitle: video.displayTitle,
                          fallbackSubtitle: video.isMovie ? nil : video.episodeCode, fallbackSymbol: video.isMovie ? "film" : "tv")
+                .overlay(alignment: .topLeading) {
+                    if downloads.isDownloaded(video.path) { DownloadedBadge().padding(8) }
+                }
                 .overlay(alignment: .bottom) {
                     if video.progress > 0 { ProgressBar(value: video.progress).padding(8) }
                 }
@@ -56,6 +73,54 @@ struct ProgressBar: View {
             }
         }
         .frame(height: 4)
+    }
+}
+
+extension PosterCard {
+    private var isDownloaded: Bool {
+        switch download {
+        case .file(let path): downloads.isDownloaded(path)
+        case .folder(let path): downloads.hasDownloads(in: path)
+        case nil: false
+        }
+    }
+}
+
+/// On the corner of a poster whose video is on this device.
+struct DownloadedBadge: View {
+    var body: some View {
+        Image(systemName: "arrow.down.circle.fill")
+            .symbolRenderingMode(.palette)
+            .foregroundStyle(.white, Color.black.opacity(0.6))
+            .font(.title3)
+            .shadow(radius: 2)
+            .accessibilityLabel("Downloaded")
+    }
+}
+
+/// What a scan is up to, or why the last one failed, atop a tab. Its own
+/// view, so the scan's progress text only redraws this.
+struct SyncBanner: View {
+    @Environment(LibrarySync.self) private var sync
+
+    var body: some View {
+        switch sync.state {
+        case .scanning(let message):
+            HStack(spacing: 10) {
+                ProgressView()
+                Text(message).font(.subheadline).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .font(.subheadline)
+                .foregroundStyle(.orange)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+        case .idle:
+            EmptyView()
+        }
     }
 }
 

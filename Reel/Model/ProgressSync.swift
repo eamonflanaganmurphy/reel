@@ -29,12 +29,15 @@ final class ProgressSync {
 
     private let device = InstallID.value
 
-    /// Something here hasn't reached the share yet. Kept across launches:
-    /// progress made away from the share (on a plane, say) still goes once
-    /// it's back, even if the app was closed in between.
-    private var dirty = UserDefaults.standard.bool(forKey: "progressUnsent") {
-        didSet { if dirty != oldValue { UserDefaults.standard.set(dirty, forKey: "progressUnsent") } }
+    /// Something here hasn't been sent to the share yet. Kept across
+    /// launches: progress made away from the share (on a plane, say) still
+    /// goes once it's back, even if the app was closed in between. On disk
+    /// it's only cleared once a write has gone through (see `push`), so the
+    /// app being killed mid-write doesn't lose it.
+    private var dirty = UserDefaults.standard.bool(forKey: Self.unsentKey) {
+        didSet { if dirty, !oldValue { UserDefaults.standard.set(true, forKey: Self.unsentKey) } }
     }
+    private static let unsentKey = "progressUnsent"
     private var pending: Task<Void, Never>?
     private var busy = false
     private var observer: NSObjectProtocol?
@@ -116,6 +119,8 @@ final class ProgressSync {
         do {
             let source = try ServerConnection.shared.source(for: settings.shareConfig)
             try await SharedProgress.save(entries, device: device, to: source)
+            // Unless something changed while this was writing.
+            if !dirty { UserDefaults.standard.set(false, forKey: Self.unsentKey) }
             status = .synced(.now)
         } catch {
             // Try again with the next change or the next time the app is put away.

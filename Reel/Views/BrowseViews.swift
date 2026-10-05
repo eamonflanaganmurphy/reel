@@ -217,7 +217,8 @@ struct EntryCard<Extra: View>: View {
         case .movie(let movie):
             NavigationLink(value: movie) {
                 PosterCard(ref: movie.posterRef, fallbackRefs: [movie.frameRef], title: movie.title, subtitle: movie.year.map(String.init),
-                           progress: movie.isInProgress ? movie.progress : 0, watched: movie.watched)
+                           progress: movie.isInProgress ? movie.progress : 0, watched: movie.watched,
+                           download: .file(movie.path))
             }
             .buttonStyle(.plain)
             .contextMenu {
@@ -228,7 +229,7 @@ struct EntryCard<Extra: View>: View {
             let link = NavigationLink(value: show) {
                 PosterCard(ref: show.posterRef, fallbackRefs: show.fallbackRefs, title: show.title,
                            subtitle: show.unwatchedCount > 0 ? "\(show.unwatchedCount) unwatched" : "Watched",
-                           symbol: "tv")
+                           symbol: "tv", download: .folder(show.path))
             }
             .buttonStyle(.plain)
             if Extra.self == EmptyView.self {

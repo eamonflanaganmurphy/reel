@@ -402,7 +402,13 @@ struct PlayerScreen: View {
     private func start(at seconds: Double) {
         // A downloaded copy plays with or without the share.
         let downloaded = downloads.localURL(for: video.path)
-        guard let url = downloaded ?? settings.shareConfig.playbackURL(for: video.path) else { return }
+        guard let url = downloaded ?? settings.shareConfig.playbackURL(for: video.path) else {
+            // Otherwise it's a spinner that never ends.
+            controller.fail(settings.isConfigured
+                ? "Couldn't make a link to this file on the share."
+                : "Set up the share in Settings to play videos that aren't downloaded.")
+            return
+        }
         let playing = video
         controller.onChooseTracks = { TrackMemory.save($0, for: playing) }
         controller.load(url, startAt: seconds, tracks: TrackMemory.choice(for: playing))
