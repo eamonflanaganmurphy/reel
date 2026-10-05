@@ -83,7 +83,7 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
 
     /// How far ahead VLC reads a file on the share, in milliseconds. A
     /// dropout shorter than this doesn't interrupt the picture.
-    private static let networkCaching = 10_000
+    private static let networkCaching = 60_000
     /// No progress for this long while it should be playing, with nothing
     /// left buffered, is taken as the share having gone quiet. VLC can
     /// otherwise wait on a dead connection for minutes.
@@ -157,8 +157,8 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
 
         let media = VLCMedia(url: url)
         if !url.isFileURL {
-            // Far more than VLC's default second, so the picture rides out
-            // the share going quiet for a few seconds.
+            // A minute, VLC's most, rather than its default second, so the
+            // picture rides out the share going quiet for a while.
             media.addOption(":network-caching=\(Self.networkCaching)")
         }
         if seconds > 1 { media.addOption(":start-time=\(Int(seconds))") }
@@ -409,6 +409,9 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
         switch player.state {
         case .opening, .buffering:
             isBuffering = !player.isPlaying
+            // Filling a minute's buffer can take a while on a slow link; VLC
+            // reports buffering as data arrives, so it isn't a stall.
+            if player.state == .buffering { lastProgress = Date() }
             if player.isPlaying { started() }
         case .playing:
             isBuffering = false
