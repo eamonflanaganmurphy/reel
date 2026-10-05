@@ -1,0 +1,343 @@
+Fetching https://github.com/tylerjonesio/vlckit-spm
+[1/45] Fetching vlckit-spm
+Fetched https://github.com/tylerjonesio/vlckit-spm from cache (0.51s)
+Building for debugging...
+[0/70] /Users/runner/work/reel/reel/Packages/ReelCore/.build/arm64-apple-macosx/debug/ReelCorePackageTests.derived/runner.swift
+[1/70] Write sources
+[1/70] Write reelscan-entitlement.plist
+[3/70] Write swift-version-7974D3F7F03D5E95.txt
+[4/70] Compiling usha.c
+[5/70] Compiling unicode.c
+[6/70] Compiling timestamps.c
+[7/70] Compiling spnego-wrapper.c
+[8/70] Compiling smb3-seal.c
+[9/70] Compiling socket.c
+[10/70] Compiling sync.c
+[11/70] Compiling smb2-signing.c
+[12/70] Compiling smb2-share-enum.c
+[13/70] Compiling smb2-data-reparse-point.c
+[14/70] Compiling smb2-data-security-descriptor.c
+[15/70] Compiling smb2-data-filesystem-info.c
+[16/70] Compiling smb2-cmd-write.c
+[17/70] Compiling smb2-data-file-info.c
+[18/70] Compiling smb2-cmd-tree-disconnect.c
+[19/70] Compiling smb2-cmd-tree-connect.c
+[20/70] Compiling smb2-cmd-set-info.c
+[21/70] Compiling smb2-cmd-session-setup.c
+[22/70] Compiling smb2-cmd-read.c
+[23/70] Compiling smb2-cmd-query-info.c
+[24/70] Compiling smb2-cmd-query-directory.c
+[25/70] Compiling smb2-cmd-oplock-break.c
+[26/70] Compiling smb2-cmd-notify-change.c
+[27/70] Compiling smb2-cmd-negotiate.c
+[28/70] Compiling smb2-cmd-logoff.c
+[29/70] Compiling smb2-cmd-lock.c
+[30/70] Compiling smb2-cmd-flush.c
+[31/70] Compiling smb2-cmd-ioctl.c
+[32/70] Compiling smb2-cmd-error.c
+[33/70] Compiling smb2-cmd-echo.c
+[34/70] Compiling smb2-cmd-close.c
+[35/70] Compiling smb2-cmd-create.c
+[36/70] Compiling sha1.c
+[37/70] Compiling sha224-256.c
+[38/70] Compiling sha384-512.c
+[39/70] Compiling md5.c
+[40/70] Compiling pdu.c
+[41/70] Compiling ntlmssp.c
+[42/70] Compiling md4c.c
+[43/70] Compiling krb5-wrapper.c
+[44/70] Compiling hmac.c
+[45/70] Compiling init.c
+[46/70] Compiling hmac-md5.c
+[47/70] Compiling libsmb2.c
+[48/70] Compiling errors.c
+[49/70] Compiling dcerpc-srvsvc.c
+[50/70] Compiling dcerpc-lsa.c
+[51/70] Compiling compat.c
+[52/70] Compiling dcerpc.c
+[53/70] Compiling asn1-ber.c
+[54/70] Compiling alloc.c
+[55/70] Compiling aes_reference.c
+[56/70] Compiling aes128ccm.c
+[57/70] Write sources
+[61/70] Compiling aes.c
+[62/70] Compiling aes_apple.c
+[64/79] Emitting module AMSMB2
+[65/82] Compiling AMSMB2 ObjCCompat.swift
+[66/82] Compiling AMSMB2 Parsers.swift
+[67/82] Compiling AMSMB2 Stream.swift
+[68/82] Compiling AMSMB2 FileHandle.swift
+[69/82] Compiling AMSMB2 FileMonitoring.swift
+[70/82] Compiling AMSMB2 Fsctl.swift
+[71/82] Compiling AMSMB2 MSRPC.swift
+[72/82] Compiling AMSMB2 AMSMB2.swift
+[73/82] Compiling AMSMB2 Context.swift
+[74/82] Compiling AMSMB2 Directory.swift
+[75/82] Compiling AMSMB2 Extensions.swift
+[75/82] Write Objects.LinkFileList
+[76/82] Linking libAMSMB2.dylib
+[78/93] Emitting module ReelCore
+[79/98] Compiling ReelCore MoreLikeThis.swift
+[80/98] Compiling ReelCore NameParser.swift
+[81/98] Compiling ReelCore SMBFileSource.swift
+[82/98] Compiling ReelCore ScanSpeed.swift
+[83/98] Compiling ReelCore ShareConfig.swift
+[84/98] Compiling ReelCore CollectionRules.swift
+[85/98] Compiling ReelCore FileDownload.swift
+[86/98] Compiling ReelCore GenreBrowse.swift
+[87/98] Compiling ReelCore LibraryLocator.swift
+[88/98] Compiling ReelCore LibraryScanner.swift
+[89/98] Compiling ReelCore SharedCollections.swift
+[90/98] Compiling ReelCore SharedFrames.swift
+[91/98] Compiling ReelCore SharedProgress.swift
+[92/98] Compiling ReelCore TMDB.swift
+[93/98] Compiling ReelCore WebDAVFileSource.swift
+[94/109] Emitting module reelscan
+[95/109] Compiling reelscan main.swift
+[95/109] Write Objects.LinkFileList
+[96/109] Linking reelscan
+[97/109] Applying reelscan
+[99/109] Compiling ReelCoreTests CollectionRulesTests.swift
+[100/109] Compiling ReelCoreTests ConnectionTests.swift
+[101/109] Compiling ReelCoreTests FileDownloadTests.swift
+[102/109] Compiling ReelCoreTests GenreBrowseTests.swift
+[103/109] Emitting module ReelCoreTests
+[104/109] Compiling ReelCoreTests LibraryScannerTests.swift
+[105/109] Compiling ReelCoreTests NameParserTests.swift
+[106/109] Compiling ReelCoreTests ScanSpeedTests.swift
+[107/109] Compiling ReelCoreTests SharedCollectionsTests.swift
+[108/113] Compiling ReelCoreTests SharedFramesTests.swift
+[109/113] Compiling ReelCoreTests SharedProgressTests.swift
+[110/113] Compiling ReelCoreTests TMDBTests.swift
+[111/113] Compiling ReelCoreTests WebDAVTests.swift
+[112/115] Emitting module ReelCorePackageTests
+[113/115] Compiling ReelCorePackageTests runner.swift
+[113/115] Write Objects.LinkFileList
+[114/115] Linking ReelCorePackageTests
+Build complete! (46.56s)
+Test Suite 'All tests' started at 2026-10-05 17:19:09.800.
+Test Suite 'ReelCorePackageTests.xctest' started at 2026-10-05 17:19:09.803.
+Test Suite 'CollectionRulesTests' started at 2026-10-05 17:19:09.803.
+Test Case '-[ReelCoreTests.CollectionRulesTests testAllFiltersMustPass]' started.
+Test Case '-[ReelCoreTests.CollectionRulesTests testAllFiltersMustPass]' passed (0.002 seconds).
+Test Case '-[ReelCoreTests.CollectionRulesTests testAnyFilterLetsATitleIn]' started.
+Test Case '-[ReelCoreTests.CollectionRulesTests testAnyFilterLetsATitleIn]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.CollectionRulesTests testContentsLimitsToMoviesOrShows]' started.
+Test Case '-[ReelCoreTests.CollectionRulesTests testContentsLimitsToMoviesOrShows]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.CollectionRulesTests testExclusionsApplyEvenWhenAnyWillDo]' started.
+Test Case '-[ReelCoreTests.CollectionRulesTests testExclusionsApplyEvenWhenAnyWillDo]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.CollectionRulesTests testFileRuntimeStandsInForTMDB]' started.
+Test Case '-[ReelCoreTests.CollectionRulesTests testFileRuntimeStandsInForTMDB]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.CollectionRulesTests testLibraryCatchesTitlesWithoutTMDB]' started.
+Test Case '-[ReelCoreTests.CollectionRulesTests testLibraryCatchesTitlesWithoutTMDB]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.CollectionRulesTests testMissingValuesFailInclusions]' started.
+Test Case '-[ReelCoreTests.CollectionRulesTests testMissingValuesFailInclusions]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.CollectionRulesTests testNoFiltersTakesNothing]' started.
+Test Case '-[ReelCoreTests.CollectionRulesTests testNoFiltersTakesNothing]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.CollectionRulesTests testOnlyExclusionsTakesEverythingElse]' started.
+Test Case '-[ReelCoreTests.CollectionRulesTests testOnlyExclusionsTakesEverythingElse]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.CollectionRulesTests testRatingsCompareIgnoringCaseAndSpaces]' started.
+Test Case '-[ReelCoreTests.CollectionRulesTests testRatingsCompareIgnoringCaseAndSpaces]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.CollectionRulesTests testRoundTripsThroughJSON]' started.
+Test Case '-[ReelCoreTests.CollectionRulesTests testRoundTripsThroughJSON]' passed (0.001 seconds).
+Test Suite 'CollectionRulesTests' passed at 2026-10-05 17:19:09.809.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.005 (0.007) seconds
+Test Suite 'ConnectionTests' started at 2026-10-05 17:19:09.809.
+Test Case '-[ReelCoreTests.ConnectionTests testConnectionErrorsAreRecognised]' started.
+Test Case '-[ReelCoreTests.ConnectionTests testConnectionErrorsAreRecognised]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.ConnectionTests testFriendlyErrors]' started.
+Test Case '-[ReelCoreTests.ConnectionTests testFriendlyErrors]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.ConnectionTests testGuestCredential]' started.
+Test Case '-[ReelCoreTests.ConnectionTests testGuestCredential]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.ConnectionTests testLocatorFindsNestedLibraries]' started.
+Test Case '-[ReelCoreTests.ConnectionTests testLocatorFindsNestedLibraries]' passed (0.001 seconds).
+Test Case '-[ReelCoreTests.ConnectionTests testLocatorPrefersShallowest]' started.
+Test Case '-[ReelCoreTests.ConnectionTests testLocatorPrefersShallowest]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.ConnectionTests testLocatorToleratesRepeatedNames]' started.
+Test Case '-[ReelCoreTests.ConnectionTests testLocatorToleratesRepeatedNames]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.ConnectionTests testParseAddress]' started.
+Test Case '-[ReelCoreTests.ConnectionTests testParseAddress]' passed (0.000 seconds).
+Test Suite 'ConnectionTests' passed at 2026-10-05 17:19:09.813.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+Test Suite 'FileDownloadTests' started at 2026-10-05 17:19:09.813.
+Test Case '-[ReelCoreTests.FileDownloadTests testCarriesOnFromPartial]' started.
+Test Case '-[ReelCoreTests.FileDownloadTests testCarriesOnFromPartial]' passed (0.006 seconds).
+Test Case '-[ReelCoreTests.FileDownloadTests testEmptyFile]' started.
+Test Case '-[ReelCoreTests.FileDownloadTests testEmptyFile]' passed (0.002 seconds).
+Test Case '-[ReelCoreTests.FileDownloadTests testExactMultipleOfPieces]' started.
+Test Case '-[ReelCoreTests.FileDownloadTests testExactMultipleOfPieces]' passed (0.002 seconds).
+Test Case '-[ReelCoreTests.FileDownloadTests testFailureKeepsWhatItHas]' started.
+Test Case '-[ReelCoreTests.FileDownloadTests testFailureKeepsWhatItHas]' passed (0.003 seconds).
+Test Case '-[ReelCoreTests.FileDownloadTests testWebDAVPieces]' started.
+Test Case '-[ReelCoreTests.FileDownloadTests testWebDAVPieces]' passed (0.001 seconds).
+Test Case '-[ReelCoreTests.FileDownloadTests testWholeFile]' started.
+Test Case '-[ReelCoreTests.FileDownloadTests testWholeFile]' passed (0.003 seconds).
+Test Suite 'FileDownloadTests' passed at 2026-10-05 17:19:09.832.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.018 (0.019) seconds
+Test Suite 'GenreBrowseTests' started at 2026-10-05 17:19:09.832.
+Test Case '-[ReelCoreTests.GenreBrowseTests testCombiningGenresNeedsEveryOne]' started.
+Test Case '-[ReelCoreTests.GenreBrowseTests testCombiningGenresNeedsEveryOne]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.GenreBrowseTests testGenreRowPutsUnwatchedFirstThenBestRated]' started.
+Test Case '-[ReelCoreTests.GenreBrowseTests testGenreRowPutsUnwatchedFirstThenBestRated]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.GenreBrowseTests testGenreRows]' started.
+Test Case '-[ReelCoreTests.GenreBrowseTests testGenreRows]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.GenreBrowseTests testLibraryRowsAreRecentThenBiggestGenres]' started.
+Test Case '-[ReelCoreTests.GenreBrowseTests testLibraryRowsAreRecentThenBiggestGenres]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.GenreBrowseTests testMergedGenresMapBackToTMDBNames]' started.
+Test Case '-[ReelCoreTests.GenreBrowseTests testMergedGenresMapBackToTMDBNames]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.GenreBrowseTests testOneDecadeGetsNoDecadeRow]' started.
+Test Case '-[ReelCoreTests.GenreBrowseTests testOneDecadeGetsNoDecadeRow]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.GenreBrowseTests testPairingsOnlyOfferGenresThatNarrowItDown]' started.
+Test Case '-[ReelCoreTests.GenreBrowseTests testPairingsOnlyOfferGenresThatNarrowItDown]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.GenreBrowseTests testShowsGetHalfHourAndCreatorRows]' started.
+Test Case '-[ReelCoreTests.GenreBrowseTests testShowsGetHalfHourAndCreatorRows]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.GenreBrowseTests testTVGenresMergeWithMovieOnes]' started.
+Test Case '-[ReelCoreTests.GenreBrowseTests testTVGenresMergeWithMovieOnes]' passed (0.000 seconds).
+Test Suite 'GenreBrowseTests' passed at 2026-10-05 17:19:09.835.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'LibraryScannerTests' started at 2026-10-05 17:19:09.835.
+Test Case '-[ReelCoreTests.LibraryScannerTests testMovieFolders]' started.
+Test Case '-[ReelCoreTests.LibraryScannerTests testMovieFolders]' passed (0.004 seconds).
+Test Case '-[ReelCoreTests.LibraryScannerTests testPinchflatThumbnails]' started.
+Test Case '-[ReelCoreTests.LibraryScannerTests testPinchflatThumbnails]' passed (0.004 seconds).
+Test Case '-[ReelCoreTests.LibraryScannerTests testPlaybackURLEscaping]' started.
+Test Case '-[ReelCoreTests.LibraryScannerTests testPlaybackURLEscaping]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.LibraryScannerTests testShowsWithAndWithoutSeasonFolders]' started.
+Test Case '-[ReelCoreTests.LibraryScannerTests testShowsWithAndWithoutSeasonFolders]' passed (0.001 seconds).
+Test Suite 'LibraryScannerTests' passed at 2026-10-05 17:19:09.845.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.009 (0.009) seconds
+Test Suite 'NameParserTests' started at 2026-10-05 17:19:09.845.
+Test Case '-[ReelCoreTests.NameParserTests testEmptyYearAndNoYear]' started.
+Test Case '-[ReelCoreTests.NameParserTests testEmptyYearAndNoYear]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.NameParserTests testFolderWithTags]' started.
+Test Case '-[ReelCoreTests.NameParserTests testFolderWithTags]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.NameParserTests testMultiEpisode]' started.
+Test Case '-[ReelCoreTests.NameParserTests testMultiEpisode]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.NameParserTests testNoEpisodeNumber]' started.
+Test Case '-[ReelCoreTests.NameParserTests testNoEpisodeNumber]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.NameParserTests testPinchflat]' started.
+Test Case '-[ReelCoreTests.NameParserTests testPinchflat]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.NameParserTests testRadarrFolder]' started.
+Test Case '-[ReelCoreTests.NameParserTests testRadarrFolder]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.NameParserTests testReleaseEpisode]' started.
+Test Case '-[ReelCoreTests.NameParserTests testReleaseEpisode]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.NameParserTests testReleaseNames]' started.
+Test Case '-[ReelCoreTests.NameParserTests testReleaseNames]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.NameParserTests testSeasonFolders]' started.
+Test Case '-[ReelCoreTests.NameParserTests testSeasonFolders]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.NameParserTests testShowFolders]' started.
+Test Case '-[ReelCoreTests.NameParserTests testShowFolders]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.NameParserTests testSitePrefixEpisode]' started.
+Test Case '-[ReelCoreTests.NameParserTests testSitePrefixEpisode]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.NameParserTests testSpacedEpisode]' started.
+Test Case '-[ReelCoreTests.NameParserTests testSpacedEpisode]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.NameParserTests testSubtitles]' started.
+Test Case '-[ReelCoreTests.NameParserTests testSubtitles]' passed (0.000 seconds).
+Test Suite 'NameParserTests' passed at 2026-10-05 17:19:09.850.
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
+Test Suite 'ScanSpeedTests' started at 2026-10-05 17:19:09.850.
+Test Case '-[ReelCoreTests.ScanSpeedTests testAChangedFolderIsListedAgain]' started.
+Test Case '-[ReelCoreTests.ScanSpeedTests testAChangedFolderIsListedAgain]' passed (0.001 seconds).
+Test Case '-[ReelCoreTests.ScanSpeedTests testAFailedListingStillFreesItsConnection]' started.
+Test Case '-[ReelCoreTests.ScanSpeedTests testAFailedListingStillFreesItsConnection]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.ScanSpeedTests testAMissingFolderDoesntDropAConnection]' started.
+Test Case '-[ReelCoreTests.ScanSpeedTests testAMissingFolderDoesntDropAConnection]' passed (0.011 seconds).
+Test Case '-[ReelCoreTests.ScanSpeedTests testExtraConnectionsThatFailAreDroppedAndTheScanCarriesOn]' started.
+Test Case '-[ReelCoreTests.ScanSpeedTests testExtraConnectionsThatFailAreDroppedAndTheScanCarriesOn]' passed (0.384 seconds).
+Test Case '-[ReelCoreTests.ScanSpeedTests testFoldersWithNoDateAreAlwaysListed]' started.
+Test Case '-[ReelCoreTests.ScanSpeedTests testFoldersWithNoDateAreAlwaysListed]' passed (0.001 seconds).
+Test Case '-[ReelCoreTests.ScanSpeedTests testScanningSeveralFoldersAtOnceFindsTheSame]' started.
+Test Case '-[ReelCoreTests.ScanSpeedTests testScanningSeveralFoldersAtOnceFindsTheSame]' passed (0.006 seconds).
+Test Case '-[ReelCoreTests.ScanSpeedTests testTheFirstConnectionFailingStillFailsTheScan]' started.
+Test Case '-[ReelCoreTests.ScanSpeedTests testTheFirstConnectionFailingStillFailsTheScan]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.ScanSpeedTests testUnchangedFoldersAreNotListedAgain]' started.
+Test Case '-[ReelCoreTests.ScanSpeedTests testUnchangedFoldersAreNotListedAgain]' passed (0.001 seconds).
+Test Suite 'ScanSpeedTests' passed at 2026-10-05 17:19:10.254.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.403 (0.405) seconds
+Test Suite 'SharedCollectionsTests' started at 2026-10-05 17:19:10.254.
+Test Case '-[ReelCoreTests.SharedCollectionsTests testDeletionWinsUnlessChangedSince]' started.
+Test Case '-[ReelCoreTests.SharedCollectionsTests testDeletionWinsUnlessChangedSince]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.SharedCollectionsTests testHandPickOverridesFilters]' started.
+Test Case '-[ReelCoreTests.SharedCollectionsTests testHandPickOverridesFilters]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.SharedCollectionsTests testHandPicksFromBothPhonesStand]' started.
+Test Case '-[ReelCoreTests.SharedCollectionsTests testHandPicksFromBothPhonesStand]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.SharedCollectionsTests testKeepsTheOrderFirstSeen]' started.
+Test Case '-[ReelCoreTests.SharedCollectionsTests testKeepsTheOrderFirstSeen]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.SharedCollectionsTests testNewestNameAndFiltersWin]' started.
+Test Case '-[ReelCoreTests.SharedCollectionsTests testNewestNameAndFiltersWin]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.SharedCollectionsTests testNewestPickForATitleWins]' started.
+Test Case '-[ReelCoreTests.SharedCollectionsTests testNewestPickForATitleWins]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.SharedCollectionsTests testReadsCollectionsSavedBeforeSyncing]' started.
+Test Case '-[ReelCoreTests.SharedCollectionsTests testReadsCollectionsSavedBeforeSyncing]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.SharedCollectionsTests testSaveAndLoadThroughStorage]' started.
+Test Case '-[ReelCoreTests.SharedCollectionsTests testSaveAndLoadThroughStorage]' passed (0.001 seconds).
+Test Suite 'SharedCollectionsTests' passed at 2026-10-05 17:19:10.258.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+Test Suite 'SharedFramesTests' started at 2026-10-05 17:19:10.258.
+Test Case '-[ReelCoreTests.SharedFramesTests testListsSavedFramesOnly]' started.
+Test Case '-[ReelCoreTests.SharedFramesTests testListsSavedFramesOnly]' passed (0.001 seconds).
+Test Case '-[ReelCoreTests.SharedFramesTests testNamesAreStable]' started.
+Test Case '-[ReelCoreTests.SharedFramesTests testNamesAreStable]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.SharedFramesTests testNoFolderYetIsEmpty]' started.
+Test Case '-[ReelCoreTests.SharedFramesTests testNoFolderYetIsEmpty]' passed (0.000 seconds).
+Test Suite 'SharedFramesTests' passed at 2026-10-05 17:19:10.260.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'SharedProgressTests' started at 2026-10-05 17:19:10.260.
+Test Case '-[ReelCoreTests.SharedProgressTests testNewestEntryWins]' started.
+Test Case '-[ReelCoreTests.SharedProgressTests testNewestEntryWins]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.SharedProgressTests testNoFolderYetIsEmpty]' started.
+Test Case '-[ReelCoreTests.SharedProgressTests testNoFolderYetIsEmpty]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.SharedProgressTests testRoundTripAcrossDevices]' started.
+Test Case '-[ReelCoreTests.SharedProgressTests testRoundTripAcrossDevices]' passed (0.001 seconds).
+Test Case '-[ReelCoreTests.SharedProgressTests testUnreadableFileIsSkipped]' started.
+Test Case '-[ReelCoreTests.SharedProgressTests testUnreadableFileIsSkipped]' passed (0.000 seconds).
+Test Suite 'SharedProgressTests' passed at 2026-10-05 17:19:10.262.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'TMDBTests' started at 2026-10-05 17:19:10.262.
+Test Case '-[ReelCoreTests.TMDBTests testDecodeDetailsStoredByAnOlderVersion]' started.
+Test Case '-[ReelCoreTests.TMDBTests testDecodeDetailsStoredByAnOlderVersion]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.TMDBTests testDecodeMovieDetails]' started.
+Test Case '-[ReelCoreTests.TMDBTests testDecodeMovieDetails]' passed (0.001 seconds).
+Test Case '-[ReelCoreTests.TMDBTests testDecodeSeason]' started.
+Test Case '-[ReelCoreTests.TMDBTests testDecodeSeason]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.TMDBTests testDecodeShowDetails]' started.
+Test Case '-[ReelCoreTests.TMDBTests testDecodeShowDetails]' passed (0.001 seconds).
+Test Case '-[ReelCoreTests.TMDBTests testDecodeShowSearchAndPickCountry]' started.
+Test Case '-[ReelCoreTests.TMDBTests testDecodeShowSearchAndPickCountry]' passed (0.001 seconds).
+Test Case '-[ReelCoreTests.TMDBTests testImageURL]' started.
+Test Case '-[ReelCoreTests.TMDBTests testImageURL]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.TMDBTests testMoreLikeThis]' started.
+Test Case '-[ReelCoreTests.TMDBTests testMoreLikeThis]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.TMDBTests testMovieYearTolerance]' started.
+Test Case '-[ReelCoreTests.TMDBTests testMovieYearTolerance]' passed (0.000 seconds).
+Test Suite 'TMDBTests' passed at 2026-10-05 17:19:10.268.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.005 (0.006) seconds
+Test Suite 'WebDAVTests' started at 2026-10-05 17:19:10.268.
+Test Case '-[ReelCoreTests.WebDAVTests testAbsoluteHrefsAndRewrittenFolder]' started.
+Test Case '-[ReelCoreTests.WebDAVTests testAbsoluteHrefsAndRewrittenFolder]' passed (0.001 seconds).
+Test Case '-[ReelCoreTests.WebDAVTests testApacheListing]' started.
+Test Case '-[ReelCoreTests.WebDAVTests testApacheListing]' passed (0.001 seconds).
+Test Case '-[ReelCoreTests.WebDAVTests testCompleteness]' started.
+Test Case '-[ReelCoreTests.WebDAVTests testCompleteness]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.WebDAVTests testFriendlyErrors]' started.
+Test Case '-[ReelCoreTests.WebDAVTests testFriendlyErrors]' passed (0.004 seconds).
+Test Case '-[ReelCoreTests.WebDAVTests testGarbageIsEmpty]' started.
+Test Case '-[ReelCoreTests.WebDAVTests testGarbageIsEmpty]' passed (0.001 seconds).
+Test Case '-[ReelCoreTests.WebDAVTests testNextcloudListing]' started.
+Test Case '-[ReelCoreTests.WebDAVTests testNextcloudListing]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.WebDAVTests testParseAddress]' started.
+Test Case '-[ReelCoreTests.WebDAVTests testParseAddress]' passed (0.000 seconds).
+Test Case '-[ReelCoreTests.WebDAVTests testPlainHTTPGuess]' started.
+Test Case '-[ReelCoreTests.WebDAVTests testPlainHTTPGuess]' passed (0.001 seconds).
+Test Case '-[ReelCoreTests.WebDAVTests testURLs]' started.
+Test Case '-[ReelCoreTests.WebDAVTests testURLs]' passed (0.000 seconds).
+Test Suite 'WebDAVTests' passed at 2026-10-05 17:19:10.278.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
+Test Suite 'ReelCorePackageTests.xctest' passed at 2026-10-05 17:19:10.278.
+	 Executed 90 tests, with 0 failures (0 unexpected) in 0.463 (0.475) seconds
+Test Suite 'All tests' passed at 2026-10-05 17:19:10.278.
+	 Executed 90 tests, with 0 failures (0 unexpected) in 0.463 (0.477) seconds
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
