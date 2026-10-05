@@ -133,4 +133,61 @@ final class ScanSpeedTests: XCTestCase {
             } catch {}
         }
     }
+
+    func testExtraConnectionsThatFailAreDroppedAndTheScanCarriesOn() async throws {
+        /// The app's own connection, slow enough that the others get used.
+        struct Slow: FileSource {
+            let tree: MemorySource
+            func list(_ path: String) async throws -> [FileEntry] {
+                try await Task.sleep(nanoseconds: 5_000_000)
+                return try await tree.list(path)
+            }
+        }
+        struct Refused: FileSource {
+            func list(_ path: String) async throws -> [FileEntry] {
+                throw ShareError.server(host: "nomad", code: ECONNREFUSED, detail: "too many sessions")
+            }
+        }
+        let tree = MemorySource((1...20).map { "movies/Film \($0) (2010)/Film \($0).mkv" })
+        let pool = SourcePool([Slow(tree: tree), Refused(), Refused()])
+        let result = try await LibraryScanner(source: pool, concurrency: 3).scan(root: "movies", kind: .movies)
+        XCTAssertEqual(result.movies.count, 20)
+        let retired = await pool.retired
+        XCTAssertEqual(retired, 2)
+    }
+
+    func testTheFirstConnectionFailingStillFailsTheScan() async throws {
+        struct Refused: FileSource {
+            func list(_ path: String) async throws -> [FileEntry] {
+                throw ShareError.server(host: "nomad", code: EHOSTUNREACH, detail: "unreachable")
+            }
+        }
+        let pool = SourcePool([Refused(), MemorySource(["movies/a.mkv"])])
+        do {
+            _ = try await LibraryScanner(source: pool).scan(root: "movies", kind: .movies)
+            XCTFail("Expected an error")
+        } catch ShareError.server {}
+    }
+
+    func testAMissingFolderDoesntDropAConnection() async throws {
+        struct Missing: FileSource {
+            func list(_ path: String) async throws -> [FileEntry] {
+                try await Task.sleep(nanoseconds: 2_000_000)
+                throw ShareError.folder(path: path, code: ENOENT, detail: "no such folder")
+            }
+        }
+        let pool = SourcePool([Missing(), Missing(), Missing()])
+        await withTaskGroup(of: Void.self) { group in
+            for i in 0..<3 {
+                group.addTask {
+                    do {
+                        _ = try await pool.list("movies/\(i)")
+                        XCTFail("Expected an error")
+                    } catch {}
+                }
+            }
+        }
+        let retired = await pool.retired
+        XCTAssertEqual(retired, 0)
+    }
 }

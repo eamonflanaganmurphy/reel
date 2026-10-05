@@ -80,36 +80,72 @@ public final class ListingCache: FileSource, @unchecked Sendable {
 /// handles one request at a time, waiting on the router for each, so a scan
 /// of a few thousand folders is mostly waiting; a few connections take turns
 /// with that. Each request goes to whichever connection is free.
+///
+/// The first connection is the one the rest of the app uses. If one of the
+/// others fails (the router won't open another session, or it times out
+/// under the extra load), it's dropped and the folder is listed again over
+/// the ones left, down to just the first; `retired` says how many went. Only
+/// a failure on the first, or one that's about the folder itself, reaches
+/// the caller, as it would with no pool.
 public final class SourcePool: FileSource, Sendable {
     private let sources: [any FileSource]
     private let free: FreeList
 
-    /// `sources` should be separate connections to the same share. A WebDAV
-    /// one can appear more than once: HTTP has no session to wait on.
+    /// `sources` should be separate connections to the same share, the
+    /// app's own first. A WebDAV one can appear more than once: HTTP has no
+    /// session to wait on.
     public init(_ sources: [any FileSource]) {
         precondition(!sources.isEmpty)
         self.sources = sources
         free = FreeList(count: sources.count)
     }
 
+    /// How many connections have been dropped for failing.
+    public var retired: Int {
+        get async { await free.retired }
+    }
+
     public func list(_ path: String) async throws -> [FileEntry] {
-        let i = await free.take()
-        do {
-            let entries = try await sources[i].list(path)
-            await free.give(i)
-            return entries
-        } catch {
-            await free.give(i)
-            throw error
+        while true {
+            let i = await free.take()
+            // The scan has already failed elsewhere: a folder waiting for a
+            // connection needn't make it wait any longer.
+            if Task.isCancelled {
+                await free.give(i)
+                throw CancellationError()
+            }
+            do {
+                let entries = try await sources[i].list(path)
+                await free.give(i)
+                return entries
+            } catch {
+                if i == 0 || Self.isAboutTheFolder(error) {
+                    await free.give(i)
+                    throw error
+                }
+                await free.retire(i)
+            }
+        }
+    }
+
+    /// A folder that's gone or can't be read fails the same way on any
+    /// connection.
+    private static func isAboutTheFolder(_ error: any Error) -> Bool {
+        guard let share = error as? ShareError else { return false }
+        switch share {
+        case .folder, .missingPath: return true
+        default: return false
         }
     }
 
     private actor FreeList {
         private var free: [Int]
         private var waiting: [CheckedContinuation<Int, Never>] = []
+        private(set) var retired = 0
 
         init(count: Int) {
-            free = Array(0..<count)
+            // Popped from the end, so the first connection goes first.
+            free = Array((0..<count).reversed())
         }
 
         func take() async -> Int {
@@ -123,6 +159,12 @@ public final class SourcePool: FileSource, Sendable {
             } else {
                 waiting.removeFirst().resume(returning: i)
             }
+        }
+
+        /// Never handed out again. The first connection never is retired,
+        /// so there's always one to wait for.
+        func retire(_ i: Int) {
+            retired += 1
         }
     }
 }

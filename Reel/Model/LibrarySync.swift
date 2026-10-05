@@ -29,6 +29,10 @@ final class LibrarySync {
     /// the share, so they can still be played. Set at launch.
     weak var downloads: DownloadCenter?
 
+    /// Until when scans list one folder at a time, after the router failed
+    /// to keep up with three.
+    private static let oneAtATimeKey = "scanOneAtATimeUntil"
+
     /// Only folders that changed since the last scan are listed again
     /// (see `ListingCache`), unless `full`, as Scan Now in Settings is, and
     /// as one scan a week is anyway.
@@ -44,14 +48,24 @@ final class LibrarySync {
             let config = settings.shareConfig
             let source = try ServerConnection.shared.source(for: config)
             // Folders are listed three at a time, each over a connection of
-            // its own for SMB, which only does one request at a time.
-            let extra = config.kind == .smb ? (0..<2).compactMap { _ in try? config.makeSource() } : []
-            defer { for connection in extra { Task { await connection.disconnect() } } }
-            let pool = SourcePool(([source] + (extra.isEmpty ? [source, source] : extra)).map { $0 as any FileSource })
+            // its own for SMB, which only does one request at a time. If the
+            // router balks at the extra ones they're dropped mid-scan (see
+            // `SourcePool`), and scans go one at a time for a week after.
+            let oneAtATime = (UserDefaults.standard.object(forKey: Self.oneAtATimeKey) as? Date ?? .distantPast) > Date()
+            let extra = config.kind == .smb && !oneAtATime ? (0..<2).compactMap { _ in try? config.makeSource() } : []
+            let pool = SourcePool(([source] + (extra.isEmpty && !oneAtATime ? [source, source] : extra)).map { $0 as any FileSource })
+            defer {
+                for connection in extra { Task { await connection.disconnect() } }
+                Task {
+                    if await pool.retired > 0 {
+                        UserDefaults.standard.set(Date().addingTimeInterval(7 * 24 * 60 * 60), forKey: Self.oneAtATimeKey)
+                    }
+                }
+            }
             let lastFull = UserDefaults.standard.object(forKey: "lastFullScan") as? Date ?? .distantPast
             let full = full || Date().timeIntervalSince(lastFull) > 7 * 24 * 60 * 60
             let cache = ListingCache(base: pool, previous: full ? [:] : ScanCache.load(for: config))
-            let scanner = LibraryScanner(source: cache, concurrency: 3)
+            let scanner = LibraryScanner(source: cache, concurrency: oneAtATime ? 1 : 3)
 
             for library in settings.libraries {
                 state = .scanning("Scanning \(library.name)…")

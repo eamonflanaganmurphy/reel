@@ -128,7 +128,9 @@ Then **Scan Now**. The first scan with TMDB takes a minute or so; after that onl
 The app rescans on its own when opened, at most every 15 minutes, and you can pull down on any screen to
 rescan.
 
-Scans list three folders at a time, each over its own connection, and only list again the folders that have
+Scans list three folders at a time, each over its own connection; if the router refuses or stalls on the extra
+connections, they're dropped mid-scan and the rest is listed over one, as are the scans for the next week. Scans
+only list again the folders that have
 changed since the last scan (a folder's date changes when a file is added, removed or renamed in it). Folders
 holding other folders, like a show's, are always listed, so new seasons and movies show up. **Scan Now** in
 Settings, and one scan a week, list everything, for a file replaced in place under the same name. TMDB lookups
