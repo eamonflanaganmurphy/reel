@@ -42,8 +42,8 @@ server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve 
   it's kept on the phone and loads again whenever that video plays.
 - **iPad:** bigger posters, episodes side by side, and any orientation, Split View or Stage Manager. The player
   doesn't force landscape there, and a keyboard works: space plays and pauses, ← and → skip, Esc closes.
-- **Downloads:** the download button beside Play on a movie page, or the ••• menu (Download Season, or an episode's
-  own menu), copies the video and its subtitle files onto the device, to watch with no way to reach the share, e.g. in
+- **Downloads:** the download button beside Play on a movie page, the ••• menu (Download Season), or a long press
+  on a movie's poster, an episode or a Keep Watching card copies the video and its subtitle files onto the device, to watch with no way to reach the share, e.g. in
   the car. A downloaded video always plays from the device, and stays in the library even once it's deleted from
   the share, until the download is removed. Up to four run at once, each over its own connection,
   carry on while a video plays, and wait while a scan is using the router, then carry on where they left off, as they do when Reel is reopened

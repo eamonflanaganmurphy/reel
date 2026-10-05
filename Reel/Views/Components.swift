@@ -93,6 +93,7 @@ struct KeepWatchingShelf: View {
         // Clears the position, which takes it off Keep Watching.
         Button { video.setWatched(false) } label: { Label("Mark as Unwatched", systemImage: "circle") }
         Button { playback.play(video, from: 0) } label: { Label("Play from Beginning", systemImage: "arrow.counterclockwise") }
+        Section { DownloadMenuItems(video: video) }
     }
 }
 

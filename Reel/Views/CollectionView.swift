@@ -72,6 +72,9 @@ struct CollectionView: View {
                 ForEach(sorted) { member in
                     card(member)
                         .contextMenu {
+                            if case .movie(let movie) = member {
+                                Section { DownloadMenuItems(video: movie) }
+                            }
                             Button(role: .destructive) { remove(member) } label: {
                                 Label("Remove from \(collection.name)", systemImage: "minus.circle")
                             }

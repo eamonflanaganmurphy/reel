@@ -46,6 +46,7 @@ struct LibraryView: View {
                                        progress: movie.isInProgress ? movie.progress : 0, watched: movie.watched)
                         }
                         .buttonStyle(.plain)
+                        .contextMenu { DownloadMenuItems(video: movie) }
                     }
                 } else {
                     ForEach(sortedShows) { show in
