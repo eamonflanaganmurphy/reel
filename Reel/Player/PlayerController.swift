@@ -124,9 +124,20 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
     private var reconnectStarted: Date?
     private var reconnectWork: DispatchWorkItem?
 
-    /// How far ahead VLC reads a file on the share, in milliseconds. A
-    /// dropout shorter than this doesn't interrupt the picture.
-    private static let networkCaching = 60_000
+    /// How much video VLC holds before it shows a picture, when a file
+    /// opens and after every seek, in milliseconds. Kept short so starting
+    /// and scrubbing are quick; riding out dropouts is `readAhead`'s job.
+    private static let networkCaching = 3_000
+    /// How far ahead of playback the file itself is read, in KiB, by VLC's
+    /// prefetch filter, which sits in front of every file on the share.
+    /// Playback doesn't wait for it to fill, so it costs nothing to start or
+    /// scrub. 256 MiB is around four minutes of 1080p or a minute of a 4K
+    /// remux; a seek back into what it still holds is instant too.
+    private static let readAhead = 256 * 1024
+    /// How much each background read asks the share for, in bytes. VLC's
+    /// 16 KiB reads are a round trip to the router apiece, too slow to get
+    /// ahead of a high-bitrate video.
+    private static let readSize = 1 << 20
     /// No progress for this long while it should be playing, with nothing
     /// left buffered, is taken as the share having gone quiet. VLC can
     /// otherwise wait on a dead connection for minutes.
@@ -202,9 +213,9 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
 
         let media = VLCMedia(url: url)
         if !url.isFileURL {
-            // A minute, VLC's most, rather than its default second, so the
-            // picture rides out the share going quiet for a while.
             media.addOption(":network-caching=\(Self.networkCaching)")
+            media.addOption(":prefetch-buffer-size=\(Self.readAhead)")
+            media.addOption(":prefetch-read-size=\(Self.readSize)")
         }
         if seconds > 1 { media.addOption(":start-time=\(Int(seconds))") }
         pendingSubtitles = []
@@ -466,8 +477,8 @@ final class PlayerController: NSObject, ObservableObject, VLCMediaPlayerDelegate
         switch player.state {
         case .opening, .buffering:
             isBuffering = !player.isPlaying
-            // Filling a minute's buffer can take a while on a slow link; VLC
-            // reports buffering as data arrives, so it isn't a stall.
+            // Buffering can take a while on a slow link; VLC reports it as
+            // data arrives, so it isn't a stall.
             if player.state == .buffering { lastProgress = Date() }
             if player.isPlaying { started() }
         case .playing:
