@@ -6,7 +6,9 @@ server software involved: the app lists the folders itself, looks titles up on
 TMDB, and plays the files with VLC. Nothing is transcoded. It can use a WebDAV
 server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve webdav`.
 
-- **Library:** Home (Keep Watching, Recently Added), plus a poster grid per library with its own Keep Watching row
+- **Library:** Home (Keep Watching, Recently Added), plus a poster grid per library with its own Keep Watching row.
+  A long press on a movie, an episode or a Keep Watching card marks it watched, or unwatched once it's started, and
+  downloads it.
 - **Collections:** tabs that gather movies and shows from any library by filters: age rating, genre (or not in a
   genre), library, year, TMDB rating and length, matching any or all of them. A **Kids & Family** collection is there to
   start with. The ••• menu on a movie or show page adds it to or removes it from a collection by hand, whatever the

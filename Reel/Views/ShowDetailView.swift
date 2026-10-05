@@ -220,10 +220,7 @@ struct EpisodeRow: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button { episode.setWatched(!episode.watched) } label: {
-                Label(episode.watched ? "Mark as Unwatched" : "Mark as Watched",
-                      systemImage: episode.watched ? "circle" : "checkmark.circle")
-            }
+            WatchedMenuItems(video: episode)
             if episode.isInProgress {
                 Button { playback.play(episode, from: 0) } label: {
                     Label("Play from Beginning", systemImage: "arrow.counterclockwise")

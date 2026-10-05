@@ -89,11 +89,34 @@ struct KeepWatchingShelf: View {
 
     @ViewBuilder
     private func menu(_ video: Video) -> some View {
-        Button { video.setWatched(true) } label: { Label("Mark as Watched", systemImage: "checkmark.circle") }
-        // Clears the position, which takes it off Keep Watching.
-        Button { video.setWatched(false) } label: { Label("Mark as Unwatched", systemImage: "circle") }
+        // Unwatched clears the position, which takes it off Keep Watching.
+        WatchedMenuItems(video: video)
         Button { playback.play(video, from: 0) } label: { Label("Play from Beginning", systemImage: "arrow.counterclockwise") }
         Section { DownloadMenuItems(video: video) }
+    }
+}
+
+/// Mark as Watched unless it is, and Mark as Unwatched once it's watched or started.
+struct WatchedMenuItems: View {
+    let video: Video
+
+    var body: some View {
+        if !video.watched {
+            Button { video.setWatched(true) } label: { Label("Mark as Watched", systemImage: "checkmark.circle") }
+        }
+        if video.watched || video.isInProgress {
+            Button { video.setWatched(false) } label: { Label("Mark as Unwatched", systemImage: "circle") }
+        }
+    }
+}
+
+/// A movie poster's long press.
+struct MovieMenuItems: View {
+    let movie: Video
+
+    var body: some View {
+        WatchedMenuItems(video: movie)
+        Section { DownloadMenuItems(video: movie) }
     }
 }
 

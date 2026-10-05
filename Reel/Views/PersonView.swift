@@ -143,7 +143,7 @@ struct PersonView: View {
                            subtitle: role ?? video.year.map(String.init), watched: video.watched)
             }
             .buttonStyle(.plain)
-            .contextMenu { DownloadMenuItems(video: video) }
+            .contextMenu { MovieMenuItems(movie: video) }
         case .show(let show, let role):
             NavigationLink(value: show) {
                 PosterCard(ref: show.posterRef, fallbackRefs: show.fallbackRefs, title: show.title,

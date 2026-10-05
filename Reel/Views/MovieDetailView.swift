@@ -50,7 +50,7 @@ private struct MoviePage: View {
                                    progress: movie.isInProgress ? movie.progress : 0, watched: movie.watched)
                     }
                     .buttonStyle(.plain)
-                    .contextMenu { DownloadMenuItems(video: movie) }
+                    .contextMenu { MovieMenuItems(movie: movie) }
                 }
 
                 FileInfo(video: video)
