@@ -45,7 +45,8 @@ private struct ShowPage: View {
                 DetailHero(ref: backdrop, fallbackRefs: fallbacks) {
                     TitleArt(title: show.title, logoPath: details?.logoPath)
                     MetaLines(facts: facts(details, seasons: seasons, episodes: all.count),
-                              certification: details?.certification, rating: details?.rating, genres: details?.genres ?? [])
+                              certification: details?.certification, rating: details?.rating, genres: details?.genres ?? [],
+                              genreScope: .kind(.shows))
                     if let next {
                         Button { playback.play(next) } label: {
                             PlayButtonLabel(title: next.isInProgress ? "Resume" : "Play",
@@ -65,7 +66,7 @@ private struct ShowPage: View {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
                                 ForEach(seasons, id: \.self) { s in
-                                    SeasonChip(title: s == 0 ? "Specials" : "Season \(s)", selected: s == selectedSeason) {
+                                    Chip(title: s == 0 ? "Specials" : "Season \(s)", selected: s == selectedSeason) {
                                         withAnimation(.easeInOut(duration: 0.2)) { season = s }
                                     }
                                 }
@@ -154,25 +155,6 @@ private struct ShowPage: View {
 
     private static func defaultSeason(next: Video?, seasons: [Int]) -> Int {
         next?.season ?? seasons.first ?? 1
-    }
-}
-
-private struct SeasonChip: View {
-    let title: String
-    let selected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .foregroundStyle(selected ? Color.black : Color.primary)
-                .background(selected ? Color.white : Color.white.opacity(0.12), in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

@@ -1,20 +1,22 @@
 import SwiftData
 import SwiftUI
 
-/// Poster grid for one library: movies, or shows.
+/// One library's movies or shows: rows by genre, or one poster grid.
 struct LibraryView: View {
     let library: LibraryConfig
 
     @Environment(AppSettings.self) private var settings
     @Environment(LibrarySync.self) private var sync
     @Environment(\.modelContext) private var context
-    @Environment(\.horizontalSizeClass) private var sizeClass
 
     @Query private var movies: [Video]
     @Query private var shows: [Show]
     @Query private var inProgress: [Video]
     @State private var search = ""
     @State private var sort = SortOrder.title
+    @State private var data = BrowseData()
+    /// Kept for each library, so one left on All stays on All.
+    @AppStorage private var mode: BrowseMode
 
     enum SortOrder: String, CaseIterable {
         case title = "Title"
@@ -25,6 +27,7 @@ struct LibraryView: View {
     init(library: LibraryConfig) {
         self.library = library
         let id = library.id
+        _mode = AppStorage(wrappedValue: .browse, "browseMode." + id.uuidString)
         _movies = Query(filter: #Predicate<Video> { $0.libraryID == id && $0.isMovie }, sort: \Video.title)
         _shows = Query(filter: #Predicate<Show> { $0.libraryID == id }, sort: \Show.title)
         _inProgress = Query(filter: #Predicate<Video> { $0.libraryID == id && $0.positionSeconds > 30 && !$0.watched },
@@ -33,33 +36,8 @@ struct LibraryView: View {
 
     var body: some View {
         ScrollView {
-            // Hidden while searching, which is for finding something new.
-            if search.isEmpty {
-                KeepWatchingShelf(videos: inProgress).padding(.top)
-            }
-
-            LazyVGrid(columns: Sizing(sizeClass).gridColumns, spacing: 18) {
-                if library.kind == .movies {
-                    ForEach(sortedMovies) { movie in
-                        NavigationLink(value: movie) {
-                            PosterCard(ref: movie.posterRef, fallbackRefs: [movie.frameRef], title: movie.title, subtitle: movie.year.map(String.init),
-                                       progress: movie.isInProgress ? movie.progress : 0, watched: movie.watched)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu { MovieMenuItems(movie: movie) }
-                    }
-                } else {
-                    ForEach(sortedShows) { show in
-                        NavigationLink(value: show) {
-                            PosterCard(ref: show.posterRef, fallbackRefs: show.fallbackRefs, title: show.title,
-                                       subtitle: show.unwatchedCount > 0 ? "\(show.unwatchedCount) unwatched" : "Watched",
-                                       symbol: "tv")
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .padding()
+            BrowsePage(scope: .library(library.id), data: data, all: all, inProgress: inProgress, mode: $mode,
+                       sort: sort, search: search) { _ in EmptyView() }
 
             if movies.isEmpty && shows.isEmpty {
                 ContentUnavailableView(sync.isRunning ? "Scanning…" : "Nothing in \(library.name)",
@@ -71,33 +49,24 @@ struct LibraryView: View {
         .searchable(text: $search)
         .refreshable { await sync.run(settings: settings, context: context) }
         .toolbar {
-            Menu {
-                Picker("Sort", selection: $sort) {
-                    ForEach(SortOrder.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            if data.showsGrid(mode: mode, search: search) {
+                Menu {
+                    Picker("Sort", selection: $sort) {
+                        ForEach(SortOrder.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
                 }
-            } label: {
-                Image(systemName: "arrow.up.arrow.down")
             }
+        }
+        .task(id: BrowseData.Inputs(.library(library.id), movies: movies, shows: shows, settings: settings)) {
+            if let loaded = await BrowseData.load(.library(library.id), movies: movies, shows: shows, settings: settings) { data = loaded }
         }
         .libraryDestinations()
     }
 
-    private var sortedMovies: [Video] {
-        let filtered = search.isEmpty ? movies : movies.filter { $0.title.localizedCaseInsensitiveContains(search) }
-        switch sort {
-        case .title: return filtered.sorted { Self.sortKey($0.title) < Self.sortKey($1.title) }
-        case .added: return filtered.sorted { $0.addedAt > $1.addedAt }
-        case .year: return filtered.sorted { ($0.year ?? 0) > ($1.year ?? 0) }
-        }
-    }
-
-    private var sortedShows: [Show] {
-        let filtered = search.isEmpty ? shows : shows.filter { $0.title.localizedCaseInsensitiveContains(search) }
-        switch sort {
-        case .title: return filtered.sorted { Self.sortKey($0.title) < Self.sortKey($1.title) }
-        case .added: return filtered.sorted { $0.updatedAt > $1.updatedAt }
-        case .year: return filtered.sorted { ($0.year ?? 0) > ($1.year ?? 0) }
-        }
+    private var all: [LibraryEntry] {
+        library.kind == .movies ? movies.map(LibraryEntry.movie) : shows.map(LibraryEntry.show)
     }
 
     /// Sorts "The Office" under O.

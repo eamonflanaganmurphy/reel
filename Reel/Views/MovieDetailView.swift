@@ -32,7 +32,7 @@ private struct MoviePage: View {
                 DetailHero(ref: backdrop, fallbackRefs: [video.frameRef]) {
                     TitleArt(title: video.displayTitle, logoPath: details?.logoPath)
                     MetaLines(facts: facts(details), certification: details?.certification, rating: details?.rating,
-                              genres: details?.genres ?? [], watched: video.watched)
+                              genres: details?.genres ?? [], watched: video.watched, genreScope: .kind(.movies))
                     PlayButtons(video: video)
                         .frame(maxWidth: layout.buttonsWidth)
                 }

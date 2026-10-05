@@ -110,6 +110,8 @@ struct MetaLines: View {
     var rating: Double?
     var genres: [String] = []
     var watched = false
+    /// Where tapping a genre browses; nil leaves them as plain text.
+    var genreScope: BrowseScope?
 
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -136,8 +138,18 @@ struct MetaLines: View {
                 }
             }
             .lineLimit(1)
-            if !genres.isEmpty {
-                Text(genres.prefix(3).joined(separator: " · ")).lineLimit(1)
+            let shown = Array(GenreBrowse.genres(of: genres).prefix(3))
+            if let genreScope, !shown.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(Array(shown.enumerated()), id: \.element) { i, genre in
+                        if i > 0 { Text("·") }
+                        NavigationLink(value: GenreRoute(scope: genreScope, genres: [genre])) { Text(genre) }
+                            .buttonStyle(.plain)
+                    }
+                }
+                .lineLimit(1)
+            } else if !shown.isEmpty {
+                Text(shown.joined(separator: " · ")).lineLimit(1)
             }
         }
         .font(.subheadline.weight(.medium))

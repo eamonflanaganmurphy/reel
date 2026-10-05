@@ -120,6 +120,38 @@ struct MovieMenuItems: View {
     }
 }
 
+/// A pill to pick with, e.g. a season or a genre.
+struct Chip: View {
+    let title: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) { ChipLabel(title: title, selected: selected) }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// A chip's look, for a chip that's a link instead of a button.
+struct ChipLabel: View {
+    let title: String
+    var detail: String?
+    let selected: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+            if let detail { Text(detail).foregroundStyle(selected ? Color.black.opacity(0.5) : Color.secondary) }
+        }
+        .font(.subheadline.weight(.semibold))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .foregroundStyle(selected ? Color.black : Color.primary)
+        .background(selected ? Color.white : Color.white.opacity(0.12), in: Capsule())
+    }
+}
+
 /// Horizontally scrolling titled row, as on Home.
 struct ShelfRow<Item: Identifiable, Card: View>: View {
     let title: String

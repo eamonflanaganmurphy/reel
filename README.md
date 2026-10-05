@@ -6,13 +6,22 @@ server software involved: the app lists the folders itself, looks titles up on
 TMDB, and plays the files with VLC. Nothing is transcoded. It can use a WebDAV
 server instead of SMB, e.g. Nextcloud, a Synology or QNAP NAS, or `rclone serve webdav`.
 
-- **Library:** Home (Keep Watching, Recently Added), plus a poster grid per library with its own Keep Watching row.
+- **Library:** Home (Keep Watching, Recently Added), plus a tab per library with its own Keep Watching row. **Browse**
+  lays a library out like Home: Recently Added, then a row for each genre, biggest first, with what you haven't watched
+  at the front. **All** is the whole library in one poster grid, and searching always shows the grid.
   A long press on a movie, an episode or a Keep Watching card marks it watched, or unwatched once it's started, and
   downloads it.
+- **Genres:** tap a genre's row title, a genre chip atop a library, or a genre on a movie or show page for that genre's
+  page: rows of what you haven't watched, the best rated, the newest, each decade, the short ones (under 100 minutes,
+  or half-hour episodes), and the director and actors it has most of; or **All** of it in a grid. Chips add the genres
+  that most often go with it (Comedy + Romance), the shuffle button opens something unwatched at random, and the •••
+  menu saves it as a collection. TMDB's TV genres are merged with the movie ones, so "Sci-Fi & Fantasy" shows are under
+  Sci-Fi and Fantasy alongside the movies. Titles TMDB doesn't know have no genres, so a library with TMDB off (Kids) is
+  just the grid.
 - **Collections:** tabs that gather movies and shows from any library by filters: age rating, genre (or not in a
   genre), library, year, TMDB rating and length, matching any or all of them. A **Kids & Family** collection is there to
   start with. The ••• menu on a movie or show page adds it to or removes it from a collection by hand, whatever the
-  filters say. Collections are set up in Settings or from the filter button on their tab. They're kept in the hidden
+  filters say. A collection's tab has Browse and All too. Collections are set up in Settings or from the filter button on their tab. They're kept in the hidden
   `.reel/collections` folder on the share, so every phone has the same ones: the newest name and filters win, and hand
   picks from different phones all stand. Which tabs show is up to each phone.
 - **Tabs:** Settings → Tabs shows or hides each library's and collection's tab and drags them into any order, on each
